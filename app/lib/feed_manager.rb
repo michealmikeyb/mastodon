@@ -268,17 +268,22 @@ class FeedManager
     end
   end
 
-  def get_external_trends
-    uri_string = 'https://sfba.social/api/v1/trends/statuses'
-    uri = URI(uri_string)
-    res = Net::HTTP.get_response(uri)
-    res_json = JSON.parse(res.body)
+  def get_external_trends(amount)
     statuses = []
-    for status_json in res_json do
-      status = FetchRemoteStatusService.new.call(status_json['url'])
-      unless status.nil? then
-        statuses.append(status)
+    offset = 0
+    limit = 20
+    while statuses.length() < amount do
+      uri_string = "https://sfba.social/api/v1/trends/statuses?limit=#{limit}&offset=#{offset}"
+      uri = URI(uri_string)
+      res = Net::HTTP.get_response(uri)
+      res_json = JSON.parse(res.body)
+      for status_json in res_json do
+        status = FetchRemoteStatusService.new.call(status_json['url'])
+        unless status.nil? then
+          statuses.append(status)
+        end
       end
+      offset = offset + limit
     end
     statuses
   end
@@ -318,7 +323,7 @@ class FeedManager
       trim(:for_you, account.id)
     end
 
-    external_trends = get_external_trends()
+    external_trends = get_external_trends(60)
     crutches = build_crutches(account.id, external_trends)
     external_trends.each do |status|
       next if filter_from_home?(status, account.id, crutches)
