@@ -14,6 +14,7 @@ import NavigationPortal from 'mastodon/components/navigation_portal';
 
 const messages = defineMessages({
   home: { id: 'tabs_bar.home', defaultMessage: 'Home' },
+  for_you: { id: 'tabs_bar.for_you', defaultMessage: 'For You' },
   notifications: { id: 'tabs_bar.notifications', defaultMessage: 'Notifications' },
   explore: { id: 'explore.title', defaultMessage: 'Explore' },
   local: { id: 'tabs_bar.local_timeline', defaultMessage: 'Local' },
@@ -53,6 +54,7 @@ class NavigationPanel extends React.Component {
         {signedIn && (
           <React.Fragment>
             <ColumnLink transparent to='/home' icon='home' text={intl.formatMessage(messages.home)} />
+            <ColumnLink transparent to='/for_you' icon='heart' text={intl.formatMessage(messages.for_you)} />
             <ColumnLink transparent to='/notifications' icon={<NotificationsCounterIcon className='column-link__icon' />} text={intl.formatMessage(messages.notifications)} />
             <FollowRequestsColumnLink />
           </React.Fragment>

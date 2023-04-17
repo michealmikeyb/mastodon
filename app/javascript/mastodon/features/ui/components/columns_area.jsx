@@ -18,6 +18,7 @@ import {
   BookmarkedStatuses,
   ListTimeline,
   Directory,
+  ForYouTimeline,
 } from '../../ui/util/async-components';
 import ComposePanel from './compose_panel';
 import NavigationPanel from './navigation_panel';
@@ -37,6 +38,7 @@ const componentMap = {
   'BOOKMARKS': BookmarkedStatuses,
   'LIST': ListTimeline,
   'DIRECTORY': Directory,
+  'FOR_YOU': ForYouTimeline,
 };
 
 export default class ColumnsArea extends ImmutablePureComponent {

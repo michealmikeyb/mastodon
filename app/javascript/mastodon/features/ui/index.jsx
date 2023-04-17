@@ -11,7 +11,7 @@ import ModalContainer from './containers/modal_container';
 import { layoutFromWindow } from 'mastodon/is_mobile';
 import { debounce } from 'lodash';
 import { uploadCompose, resetCompose, changeComposeSpoilerness } from '../../actions/compose';
-import { expandHomeTimeline } from '../../actions/timelines';
+import { expandHomeTimeline, expandForYouTimeline } from '../../actions/timelines';
 import { expandNotifications } from '../../actions/notifications';
 import { fetchServer, fetchServerTranslationLanguages } from '../../actions/server';
 import { clearHeight } from '../../actions/height_cache';
@@ -32,6 +32,7 @@ import {
   AccountTimeline,
   AccountGallery,
   HomeTimeline,
+  ForYouTimeline,
   Followers,
   Following,
   Reblogs,
@@ -95,6 +96,7 @@ const keyMap = {
   moveUp: ['up', 'k'],
   back: 'backspace',
   goToHome: 'g h',
+  goToForYou: 'g y',
   goToNotifications: 'g n',
   goToLocal: 'g l',
   goToFederated: 'g t',
@@ -181,6 +183,8 @@ class SwitchingColumnsArea extends React.PureComponent {
           <WrappedRoute path='/privacy-policy' component={PrivacyPolicy} content={children} />
 
           <WrappedRoute path={['/home', '/timelines/home']} component={HomeTimeline} content={children} />
+
+          <WrappedRoute path={['/for_you', '/timelines/for_you']} component={ForYouTimeline} content={children} />
           <WrappedRoute path={['/public', '/timelines/public']} exact component={PublicTimeline} content={children} />
           <WrappedRoute path={['/public/local', '/timelines/public/local']} exact component={CommunityTimeline} content={children} />
           <WrappedRoute path={['/conversations', '/timelines/direct']} component={DirectTimeline} content={children} />
@@ -395,6 +399,7 @@ class UI extends React.PureComponent {
     if (signedIn) {
       this.props.dispatch(fetchMarkers());
       this.props.dispatch(expandHomeTimeline());
+      this.props.dispatch(expandForYouTimeline());
       this.props.dispatch(expandNotifications());
       this.props.dispatch(fetchServerTranslationLanguages());
 

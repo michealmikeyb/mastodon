@@ -29,6 +29,7 @@ Rails.application.routes.draw do
     /mutes
     /followed_tags
     /statuses/(*any)
+    /for_you
   ).freeze
 
   root 'home#index'
@@ -468,6 +469,7 @@ Rails.application.routes.draw do
 
       namespace :timelines do
         resource :home, only: :show, controller: :home
+        resource :for_you, only: :show, controller: :for_you
         resource :public, only: :show, controller: :public
         resources :tag, only: :show
         resources :list, only: :show
