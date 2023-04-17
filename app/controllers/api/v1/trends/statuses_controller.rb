@@ -1,4 +1,6 @@
 # frozen_string_literal: true
+require 'net/http'
+require 'json'
 
 class Api::V1::Trends::StatusesController < Api::BaseController
   before_action :set_statuses
@@ -15,12 +17,28 @@ class Api::V1::Trends::StatusesController < Api::BaseController
     Setting.trends
   end
 
+  def get_external_trends
+    uri_string = 'https://sfba.social/api/v1/trends/statuses'
+    uri = URI(uri_string)
+    res = Net::HTTP.get_response(uri)
+    res_json = JSON.parse(res.body)
+    statuses = []
+    for status_json in res_json do
+      status = FetchRemoteStatusService.new.call(status_json['url'])
+      unless status.nil? then
+        statuses.append(status)
+      end
+    end
+    statuses
+  end
+
   def set_statuses
+    statuses = get_external_trends()
     @statuses = if enabled?
-                  cache_collection(statuses_from_trends.offset(offset_param).limit(limit_param(DEFAULT_STATUSES_LIMIT)), Status)
-                else
-                  []
-                end
+      statuses
+    else
+      []
+    end
   end
 
   def statuses_from_trends
