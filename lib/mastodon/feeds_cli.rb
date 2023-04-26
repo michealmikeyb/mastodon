@@ -56,5 +56,12 @@ module Mastodon
       redis.del(keys)
       say('OK', :green)
     end
+
+    desc 'build_for_you', 'Build for you feed for all accounts'
+    def build_for_you
+      FeedManager.instance.populate_for_you_all_accounts
+      say('OK', :green)
+    end
   end
+
 end
