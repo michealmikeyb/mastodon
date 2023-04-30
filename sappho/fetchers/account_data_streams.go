@@ -21,7 +21,7 @@ const (
   )
 
 type AccountDataStream interface {
-	Init(candidates []models.Candidate) error
+	Init(candidates []models.Candidate, db_conn *sql.DB) error
 	GetData(candidate models.Candidate) (*models.Account, error)
 }
 
@@ -32,14 +32,15 @@ type AuthorStream struct {
 }
 
 
-func (as *AuthorStream) Init(candidates []models.Candidate) error {
+func (as *AuthorStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan models.Account)
 	as.data = make(map[string] models.Account)
 	for _, candidate := range candidates {
-		if _, ok := as.channels[candidate.AuthorUrl] ; !ok {
+		author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
+		if _, ok := as.channels[author_key] ; !ok {
 			account_chan := get_author_channel(candidate)
-			as.channels[candidate.AuthorUrl] = account_chan
+			as.channels[author_key] = account_chan
 		}
 	}
 	return nil
@@ -48,7 +49,8 @@ func (as *AuthorStream) Init(candidates []models.Candidate) error {
 func get_author_channel(candidate models.Candidate) chan models.Account{
 	ch := make(chan models.Account)
 	go func() {
-		resp, err := http.Get(candidate.AuthorUrl)
+		author_url := fmt.Sprintf("https://%s/api/v1/accounts/lookup?acct=%s", candidate.AuthorDomain, candidate.AuthorUsername)
+		resp, err := http.Get(author_url)
 		if err != nil {
 			log.Println("Error getting author")
 			close(ch)
@@ -79,16 +81,18 @@ func (as *AuthorStream) has_candidate(candidate models.Candidate) bool {
 }
 
 func (as *AuthorStream) GetData(candidate models.Candidate) (*models.Account, error) {
+	author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
 	}
-	account, ok := as.data[candidate.AuthorUrl]
+	account, ok := as.data[author_key]
 	if ok {
 		return &account, nil
 	}
-	account_chan :=  as.channels[candidate.AuthorUrl]
+	account_chan :=  as.channels[author_key]
 	account = <-account_chan
-	as.data[candidate.AuthorUrl] = account
+	log.Println("done with author")
+	as.data[author_key] = account
 	return &account, nil
 
 }
@@ -113,34 +117,30 @@ func get_postgres_conn() (*sql.DB, error) {
 }
 
 
-func (as *AccountStream) Init(candidates []models.Candidate) error {
+func (as *AccountStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan models.Account)
 	as.data = make(map[string] models.Account)
 	for _, candidate := range candidates {
-		if _, ok := as.channels[candidate.AuthorUrl] ; !ok {
-			account_chan := get_account_channel(candidate)
+		if _, ok := as.channels[candidate.AccountUrl] ; !ok {
+			account_chan := get_account_channel(candidate, db_conn)
 			as.channels[candidate.AccountUrl] = account_chan
 		}
 	}
 	return nil
 }
 
-func get_account_channel(candidate models.Candidate) chan models.Account{
+func get_account_channel(candidate models.Candidate, db_conn *sql.DB) chan models.Account{
 	ch := make(chan models.Account)
 	go func() {
-		db, err := get_postgres_conn()
-		if err != nil {
-			log.Println("Error connecting to the db")
-			close(ch)
-			return
-		}
 		account := models.Account{}
-		err = db.QueryRow(`SELECT username, display_name, locked, discoverable, note, 
+		log.Println("getting account")
+		err := db_conn.QueryRow(`SELECT username, display_name, locked, discoverable, note, 
 			(SELECT count(*) FROM follows WHERE follows.account_id = accounts.id) AS following_count, 
 			(SELECT count(*) FROM follows WHERE follows.target_account_id = accounts.id) AS follower_count, 
 			(SELECT count(*) FROM statuses WHERE statuses.account_id = accounts.id) AS statuses_count  
 			FROM accounts WHERE accounts.id = $1`, candidate.AccountId).Scan(&account.Username, &account.DisplayName, &account.Locked, &account.Discoverable, &account.Note, &account.FollowingCount, &account.FollowersCount, &account.StatusesCount)
+		log.Println("got account")
 		if err != nil {
 			log.Println("Error receiving records from db %s", err)
 			close(ch)
@@ -173,6 +173,7 @@ func (as *AccountStream) GetData(candidate models.Candidate) (*models.Account, e
 	}
 	account_chan :=  as.channels[candidate.AccountUrl]
 	account = <-account_chan
+	log.Println("done with account")
 	as.data[candidate.AccountUrl] = account
 	return &account, nil
 
@@ -180,13 +181,13 @@ func (as *AccountStream) GetData(candidate models.Candidate) (*models.Account, e
 
 type AccountDataStreamMap map[string] AccountDataStream
 
-func GetAccountDataStreamMap(candidates []models.Candidate) (AccountDataStreamMap, error) {
+func GetAccountDataStreamMap(candidates []models.Candidate, db_conn *sql.DB) (AccountDataStreamMap, error) {
 	data_stream_map := AccountDataStreamMap{}
 	data_stream_map["account_stream"] = &AccountStream{}
 	data_stream_map["author_stream"] = &AuthorStream{}
 
 	for _, data_stream := range data_stream_map {
-		err := data_stream.Init(candidates)
+		err := data_stream.Init(candidates, db_conn)
 		if err != nil {
 			return data_stream_map, err
 		}

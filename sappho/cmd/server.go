@@ -3,11 +3,33 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"database/sql"
+	"fmt"
+	"strconv"
+
+	_ "github.com/lib/pq"
 
 	"github.com/gin-gonic/gin"
 	"github.com/michealmikeyb/mastodon/sappho/fetchers"
 	"github.com/michealmikeyb/mastodon/sappho/models"
 )
+
+func get_postgres_conn() (*sql.DB, error) {
+	host := os.Getenv("DB_HOST")
+	user := os.Getenv("DB_USER")
+	port, _ := strconv.Atoi(os.Getenv("DB_PORT"))
+	password := os.Getenv("DB_PASS")
+	dbname := os.Getenv("DB_NAME")
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+    "password=%s dbname=%s sslmode=disable",
+    host, port, user, password, dbname)
+	db, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
 func main() {
 	router := gin.Default()
@@ -18,13 +40,21 @@ func main() {
 
 
 func getAggregatesHandler(c *gin.Context) {
+	db_conn, err := get_postgres_conn()
+	if err != nil {
+		c.IndentedJSON(http.StatusServiceUnavailable, map[string]string{"error": "error connecting to database"})
+	}
+	defer db_conn.Close()
 	candidate := models.Candidate{
-		AuthorUrl: "https://sfba.social/api/v1/accounts/109277609058809814",
+		StatusUrl: "https://stakswipe.com/@straphanger@urbanists.social/110278374774329454",
+		StatusId: "110278374774329454",
+		AuthorUsername: "straphanger",
+		AuthorDomain: "urbanists.social",
 		AccountId: "110216720936469695",
 	}
 	candidates := make([]models.Candidate, 1)
 	candidates[0] = candidate
-	res, err := fetchers.GetAggregates(candidates)
+	res, err := fetchers.GetAggregates(candidates, db_conn)
 	if err != nil {
 		log.Panic(err)
 	}

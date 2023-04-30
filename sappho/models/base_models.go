@@ -7,14 +7,14 @@ import (
 type Candidate struct {
 	StatusUrl 		string `json:"status_url"`
 	StatusId 		string `json:"status_id"`
-	AccountUrl 	string `json:"account_url"`
+	AccountUrl 		string `json:"account_url"`
 	AccountId 		string `json:"account_id"`
-	AuthorUrl 		string `json:"author_url"`
-	AuthorId 		string `json:"author_id"`
+	AuthorUsername 	string `json:"author_username"`
+	AuthorDomain 	string `json:"author_domain"`
 }
 
 type AggregatedCandidate struct {
-	AuthorFollowerCount 	int `json:"author_follower_count"`
+	Aggregates				map[string]int `json:"aggregates"`
 	Candidate				Candidate `json:"candidate"`
 }
 
@@ -38,6 +38,7 @@ type Account struct {
 	FollowingCount int       `json:"following_count"`
 	StatusesCount  int       `json:"statuses_count"`
 	LastStatusAt   string    `json:"last_status_at"`
+	Domain         string	 `json:"domain"`
 	Noindex        bool      `json:"noindex"`
 	Emojis         []any     `json:"emojis"`
 	Roles          []any     `json:"roles"`
@@ -46,4 +47,30 @@ type Account struct {
 		Value      string `json:"value"`
 		VerifiedAt any    `json:"verified_at"`
 	} `json:"fields"`
+}
+
+type Status struct {
+	ID                 string    `json:"id"`
+	CreatedAt          time.Time `json:"created_at"`
+	InReplyToID        any       `json:"in_reply_to_id"`
+	InReplyToAccountID any       `json:"in_reply_to_account_id"`
+	Sensitive          bool      `json:"sensitive"`
+	SpoilerText        string    `json:"spoiler_text"`
+	Visibility         string    `json:"visibility"`
+	Language           string    `json:"language"`
+	URI                string    `json:"uri"`
+	URL                string    `json:"url"`
+	RepliesCount       int       `json:"replies_count"`
+	ReblogsCount       int       `json:"reblogs_count"`
+	FavouritesCount    int       `json:"favourites_count"`
+	EditedAt           any       `json:"edited_at"`
+	Content            string    `json:"content"`
+	Reblog             any       `json:"reblog"`
+	Account            Account `json:"account"`
+	MediaAttachments []any `json:"media_attachments"`
+	Mentions         []any `json:"mentions"`
+	Tags             []any `json:"tags"`
+	Emojis           []any `json:"emojis"`
+	Card             any   `json:"card"`
+	Poll             any   `json:"poll"`
 }
