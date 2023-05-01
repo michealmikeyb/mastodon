@@ -46,11 +46,11 @@ func getAggregatesHandler(c *gin.Context) {
 	}
 	defer db_conn.Close()
 	candidate := models.Candidate{
-		StatusExternalId: "110216144013400590",
-		StatusDomain: "universeodon.com",
-		StatusId: "110216143989719756",
-		AuthorUsername: "straphanger",
-		AuthorDomain: "urbanists.social",
+		StatusExternalId: "110284314158405915",
+		StatusDomain: "socel.net",
+		StatusId: "110284314157790330",
+		AuthorUsername: "BGP",
+		AuthorDomain: "socel.net",
 		AccountId: "110216720936469695",
 	}
 	candidates := make([]models.Candidate, 1)

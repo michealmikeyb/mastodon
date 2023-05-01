@@ -159,14 +159,22 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 		}
 		var statuses []models.Status
 		for rows.Next() {
+			var tag_strings []string
 			status := models.Status{
 				Account: models.Account{},
 			}
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&status.Tags),
+				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&tag_strings),
 			)
+			var tags []models.Tag
+			for _, tag := range tag_strings {
+				tags = append(tags, models.Tag{
+					Name: tag,
+				})
+			}
+			status.Tags = tags
 			statuses = append(statuses, status)
 		}
 		ch <- statuses
@@ -236,9 +244,9 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 		COUNT(replies.id) AS replies_count, 
 		COUNT(reblogs.id) AS reblogs_count,
 		COUNT(status_favourites.id) AS favourites_count,
-		statuses.edited_at, statuses.text, 
-		t.tag_array,
-		accounts.username, accounts.domain
+		statuses.edited_at, statuses.text,
+		accounts.username, accounts.domain,
+		t.tag_array
 		FROM statuses reblog
 		INNER JOIN statuses ON reblog.reblog_of_id=statuses.id 
 		LEFT JOIN statuses replies ON statuses.in_reply_to_id=replies.id 
@@ -260,14 +268,22 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 		}
 		var statuses []models.Status
 		for rows.Next() {
+			var tag_strings []string
 			status := models.Status{
 				Account: models.Account{},
 			}
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Tags, &status.Account.Username, &status.Account.Domain, 
+				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&tag_strings),
 			)
+			var tags []models.Tag
+			for _, tag := range tag_strings {
+				tags = append(tags, models.Tag{
+					Name: tag,
+				})
+			}
+			status.Tags = tags
 			statuses = append(statuses, status)
 		}
 		ch <- statuses

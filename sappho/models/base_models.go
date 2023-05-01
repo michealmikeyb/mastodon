@@ -70,8 +70,13 @@ type Status struct {
 	Account            Account `json:"account"`
 	MediaAttachments []any `json:"media_attachments"`
 	Mentions         []any `json:"mentions"`
-	Tags             []any `json:"tags"`
+	Tags             []Tag `json:"tags"`
 	Emojis           []any `json:"emojis"`
 	Card             any   `json:"card"`
 	Poll             any   `json:"poll"`
+}
+
+type Tag struct {
+	Name	string `json:"name"`
+	Url		string `json:"url"`
 }

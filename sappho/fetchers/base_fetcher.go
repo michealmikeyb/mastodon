@@ -52,7 +52,7 @@ func FetchAuthorFollowersCount(dsm DataStreamMaps, candidate models.Candidate, c
 func FetchAuthorLikeCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
 	statuses, err := dsm.Statuses["author_statuses_stream"].GetData(candidate)
 	if err != nil {
-		log.Println("Error getting author follower count", err)
+		log.Println("Error getting author like count", err)
 		close(c)
 		return
 	}
@@ -61,6 +61,38 @@ func FetchAuthorLikeCount(dsm DataStreamMaps, candidate models.Candidate, c chan
 		like_count = like_count + status.FavouritesCount
 	}
 	c <- like_count
+	close(c)
+	return
+}
+
+func FetchAuthorReblogCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["author_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting author reblog count", err)
+		close(c)
+		return
+	}
+	reblog_count := 0
+	for _, status := range *statuses {
+		reblog_count = reblog_count + status.ReblogsCount
+	}
+	c <- reblog_count
+	close(c)
+	return
+}
+
+func FetchAuthorReplyCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["author_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting author reply count", err)
+		close(c)
+		return
+	}
+	reply_count := 0
+	for _, status := range *statuses {
+		reply_count = reply_count + status.RepliesCount
+	}
+	c <- reply_count
 	close(c)
 	return
 }
@@ -115,6 +147,82 @@ func FetchAccountLikedAuthorStatusCount(dsm DataStreamMaps, candidate models.Can
 	return
 }
 
+func FetchAccountReblogedAuthorStatusCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_rebloged_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account liked statuses", err)
+		close(c)
+		return
+	}
+	status_count := 0
+	for _, status := range *statuses {
+		if (status.Account.Username == candidate.AuthorUsername && status.Account.Domain == candidate.AuthorDomain) {
+			status_count = status_count + 1
+		}
+	}
+	c <- status_count
+	close(c)
+	return
+}
+
+func FetchAccountLikedTagStatusCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_liked_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account liked statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+
+	status_count := 0
+	for _, status := range *statuses {
+		for _, candidate_tag := range candidate_status.Tags {
+			for _, liked_tag := range status.Tags {
+				if (candidate_tag.Name == liked_tag.Name) {
+					status_count = status_count + 1
+				}
+			}
+		}
+	}
+	c <- status_count
+	close(c)
+	return
+}
+
+func FetchAccountReblogedTagStatusCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_rebloged_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account rebloged statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+
+	status_count := 0
+	for _, status := range *statuses {
+		for _, candidate_tag := range candidate_status.Tags {
+			for _, liked_tag := range status.Tags {
+				if (candidate_tag.Name == liked_tag.Name) {
+					status_count = status_count + 1
+				}
+			}
+		}
+	}
+	c <- status_count
+	close(c)
+	return
+}
+
 func FetchCandidateStatusLikesCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
 	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
 	if err != nil {
@@ -154,9 +262,14 @@ func FetchCandidateStatusReplyCount(dsm DataStreamMaps, candidate models.Candida
 var AggregateFunctionMap = map[string]Fetcher{
 	"author_follower_count": FetchAuthorFollowersCount,
 	"author_like_count": FetchAuthorLikeCount,
+	"author_reblog_count": FetchAuthorReblogCount,
+	"author_reply_count": FetchAuthorReplyCount,
 	"account_liked_status_count": FetchAccountLikedStatusCount,
 	"account_rebloged_status_count": FetchAccountReblogedStatusCount,
 	"account_liked_author_status_count": FetchAccountLikedAuthorStatusCount,
+	"account_rebloged_author_status_count": FetchAccountReblogedAuthorStatusCount,
+	"account_liked_tag_status_count": FetchAccountLikedTagStatusCount,
+	"account_rebloged_tag_status_count": FetchAccountReblogedTagStatusCount,
 	"candidate_status_like_count": FetchCandidateStatusLikesCount,
 	"candidate_status_reblog_count": FetchCandidateStatusReblogCount,
 	"candidate_status_reply_count": FetchCandidateStatusReplyCount,
