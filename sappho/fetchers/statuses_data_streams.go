@@ -89,7 +89,7 @@ func (as *AuthorStatusesStream) has_candidate(candidate models.Candidate) bool {
 func (as *AuthorStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 	if ! as.has_candidate(candidate) {
-		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
+		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	statuses, ok := as.data[author_key]
 	if ok {
@@ -186,7 +186,7 @@ func (as *AccountLikedStatusesStream) has_candidate(candidate models.Candidate) 
 
 func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	if ! as.has_candidate(candidate) {
-		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
+		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	statuses, ok := as.data[candidate.AccountId]
 	if ok {
@@ -287,7 +287,7 @@ func (as *AccountReblogedStatusesStream) has_candidate(candidate models.Candidat
 
 func (as *AccountReblogedStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	if ! as.has_candidate(candidate) {
-		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
+		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	statuses, ok := as.data[candidate.AccountId]
 	if ok {

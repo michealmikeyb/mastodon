@@ -10,6 +10,7 @@ import (
 type DataStreamMaps struct {
 	Account 	AccountDataStreamMap
 	Statuses 	StatusesDataStreamMap
+	Status		StatusDataStreamMap
 }
 
 func CreateDataStreamMaps(candidates []models.Candidate, db_conn *sql.DB) (DataStreamMaps, error) {
@@ -25,6 +26,12 @@ func CreateDataStreamMaps(candidates []models.Candidate, db_conn *sql.DB) (DataS
 		return data_stream_maps, err
 	}
 	data_stream_maps.Statuses = statuses_dsm
+
+	status_dsm, err := GetStatusDataStreamMap(candidates, db_conn)
+	if err != nil {
+		return data_stream_maps, err
+	}
+	data_stream_maps.Status = status_dsm
 	return data_stream_maps, nil
 }
 
@@ -107,12 +114,52 @@ func FetchAccountLikedAuthorStatusCount(dsm DataStreamMaps, candidate models.Can
 	close(c)
 	return
 }
+
+func FetchCandidateStatusLikesCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	c <- candidate_status.FavouritesCount
+	close(c)
+	return
+}
+
+func FetchCandidateStatusReblogCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	c <- candidate_status.ReblogsCount
+	close(c)
+	return
+}
+
+func FetchCandidateStatusReplyCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	c <- candidate_status.RepliesCount
+	close(c)
+	return
+}
+
 var AggregateFunctionMap = map[string]Fetcher{
 	"author_follower_count": FetchAuthorFollowersCount,
 	"author_like_count": FetchAuthorLikeCount,
 	"account_liked_status_count": FetchAccountLikedStatusCount,
 	"account_rebloged_status_count": FetchAccountReblogedStatusCount,
 	"account_liked_author_status_count": FetchAccountLikedAuthorStatusCount,
+	"candidate_status_like_count": FetchCandidateStatusLikesCount,
+	"candidate_status_reblog_count": FetchCandidateStatusReblogCount,
+	"candidate_status_reply_count": FetchCandidateStatusReplyCount,
 }
 
 

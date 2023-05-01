@@ -5,12 +5,13 @@ import (
 )
 
 type Candidate struct {
-	StatusUrl 		string `json:"status_url"`
-	StatusId 		string `json:"status_id"`
-	AccountUrl 		string `json:"account_url"`
-	AccountId 		string `json:"account_id"`
-	AuthorUsername 	string `json:"author_username"`
-	AuthorDomain 	string `json:"author_domain"`
+	StatusDomain		string `json:"status_domain"`
+	StatusExternalId	string `json:"status_external_id"`
+	StatusId 			string `json:"status_id"`
+	AccountUrl 			string `json:"account_url"`
+	AccountId 			string `json:"account_id"`
+	AuthorUsername 		string `json:"author_username"`
+	AuthorDomain 		string `json:"author_domain"`
 }
 
 type AggregatedCandidate struct {

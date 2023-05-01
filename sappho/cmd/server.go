@@ -46,8 +46,9 @@ func getAggregatesHandler(c *gin.Context) {
 	}
 	defer db_conn.Close()
 	candidate := models.Candidate{
-		StatusUrl: "https://stakswipe.com/@straphanger@urbanists.social/110278374774329454",
-		StatusId: "110278374774329454",
+		StatusExternalId: "110216144013400590",
+		StatusDomain: "universeodon.com",
+		StatusId: "110216143989719756",
 		AuthorUsername: "straphanger",
 		AuthorDomain: "urbanists.social",
 		AccountId: "110216720936469695",

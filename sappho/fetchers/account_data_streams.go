@@ -82,7 +82,7 @@ func (as *AuthorStream) has_candidate(candidate models.Candidate) bool {
 func (as *AuthorStream) GetData(candidate models.Candidate) (*models.Account, error) {
 	author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 	if ! as.has_candidate(candidate) {
-		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
+		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	account, ok := as.data[author_key]
 	if ok {
@@ -161,7 +161,7 @@ func (as *AccountStream) has_candidate(candidate models.Candidate) bool {
 
 func (as *AccountStream) GetData(candidate models.Candidate) (*models.Account, error) {
 	if ! as.has_candidate(candidate) {
-		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
+		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	account, ok := as.data[candidate.AccountUrl]
 	if ok {
