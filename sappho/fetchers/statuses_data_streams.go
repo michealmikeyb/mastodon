@@ -7,6 +7,7 @@ import (
 	"github.com/michealmikeyb/mastodon/sappho/models"
 	"fmt"
 	"database/sql"
+	"github.com/lib/pq"
 )
 
 
@@ -38,7 +39,7 @@ func (as *AuthorStatusesStream) Init(candidates []models.Candidate, db_conn *sql
 }
 
 func get_author_statuses_channel(candidate models.Candidate) chan []models.Status{
-	ch := make(chan []models.Status)
+	ch := make(chan []models.Status, 1)
 	go func() {
 		author_lookup_url := fmt.Sprintf("https://%s/api/v1/accounts/lookup?acct=%s", candidate.AuthorDomain, candidate.AuthorUsername)
 		resp, err := http.Get(author_lookup_url)
@@ -71,7 +72,6 @@ func get_author_statuses_channel(candidate models.Candidate) chan []models.Statu
 			return
 		}
 		ch <- statuses
-		close(ch)
 		return
 	}()
 	return ch
@@ -97,7 +97,7 @@ func (as *AuthorStatusesStream) GetData(candidate models.Candidate) (*[]models.S
 	}
 	statuses_chan :=  as.channels[author_key]
 	statuses = <-statuses_chan
-	log.Println("done with author statuses")
+	statuses_chan <- statuses
 	as.data[author_key] = statuses
 	return &statuses, nil
 
@@ -129,20 +129,21 @@ func (as *AccountLikedStatusesStream) Init(candidates []models.Candidate, db_con
 func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql.DB) chan []models.Status{
 	ch := make(chan []models.Status, 1)
 	go func() {
-		log.Println("Getting liked statuses")
 		rows, err := db_conn.Query(`SELECT statuses.id, statuses.created_at, statuses.in_reply_to_id, statuses.in_reply_to_account_id, 
 		statuses.sensitive, statuses.spoiler_text, statuses.visibility, statuses.language, statuses.uri, 
 		statuses.url, 
 		COUNT(replies.id) AS replies_count, 
 		COUNT(reblogs.id) AS reblogs_count,
 		COUNT(status_favourites.id) AS favourites_count,
-		statuses.edited_at, statuses.text, 
+		statuses.edited_at, statuses.text,
+		accounts.username, accounts.domain, 
 		t.tag_array
 		FROM favourites
 		LEFT JOIN statuses ON favourites.status_id=statuses.id 
 		LEFT JOIN statuses replies ON statuses.in_reply_to_id=replies.id 
 		LEFT JOIN statuses reblogs ON statuses.reblog_of_id=reblogs.id 
 		LEFT JOIN favourites status_favourites ON statuses.id=status_favourites.status_id 
+		LEFT JOIN accounts ON statuses.account_id=accounts.id 
 		LEFT OUTER JOIN (
 			SELECT st.status_id AS status_id, array_agg(t.name) AS tag_array
 			FROM   statuses_tags st
@@ -150,8 +151,7 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 			GROUP  BY st.status_id
 		)  t ON statuses.id = t.status_id
 		WHERE favourites.account_id=$1
-		GROUP BY statuses.id, t.tag_array ;`, candidate.AccountId)
-		log.Println("got liked statuses")
+		GROUP BY statuses.id, t.tag_array, accounts.username, accounts.domain ;`, candidate.AccountId)
 		if err != nil {
 			log.Println("Error getting account liked statuses: ", err)
 			close(ch)
@@ -159,15 +159,16 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 		}
 		var statuses []models.Status
 		for rows.Next() {
-			status := models.Status{}
+			status := models.Status{
+				Account: models.Account{},
+			}
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Tags,
+				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&status.Tags),
 			)
 			statuses = append(statuses, status)
 		}
-		log.Println("sending statuses")
 		ch <- statuses
 		return
 	}()
@@ -184,7 +185,6 @@ func (as *AccountLikedStatusesStream) has_candidate(candidate models.Candidate) 
 }
 
 func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
-	log.Println("getting statuses")
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusUrl, candidate.AccountUrl)
 	}
@@ -194,7 +194,7 @@ func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]mo
 	}
 	statuses_chan :=  as.channels[candidate.AccountId]
 	statuses = <-statuses_chan
-	log.Println("done with account liked")
+	statuses_chan <- statuses
 	as.data[candidate.AccountId] = statuses
 	return &statuses, nil
 
@@ -228,9 +228,8 @@ func (as *AccountReblogedStatusesStream) Init(candidates []models.Candidate, db_
 }
 
 func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *sql.DB) chan []models.Status{
-	ch := make(chan []models.Status)
+	ch := make(chan []models.Status, 1)
 	go func() {
-		log.Println("getting reblogged statuses")
 		rows, err := db_conn.Query(`SELECT statuses.id, statuses.created_at, statuses.in_reply_to_id, statuses.in_reply_to_account_id, 
 		statuses.sensitive, statuses.spoiler_text, statuses.visibility, statuses.language, statuses.uri, 
 		statuses.url, 
@@ -238,12 +237,14 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 		COUNT(reblogs.id) AS reblogs_count,
 		COUNT(status_favourites.id) AS favourites_count,
 		statuses.edited_at, statuses.text, 
-		t.tag_array
+		t.tag_array,
+		accounts.username, accounts.domain
 		FROM statuses reblog
 		INNER JOIN statuses ON reblog.reblog_of_id=statuses.id 
 		LEFT JOIN statuses replies ON statuses.in_reply_to_id=replies.id 
 		LEFT JOIN statuses reblogs ON statuses.reblog_of_id=reblogs.id 
 		LEFT JOIN favourites status_favourites ON statuses.id=status_favourites.status_id 
+		LEFT JOIN accounts ON statuses.account_id=accounts.id 
 		LEFT OUTER JOIN (
 			SELECT st.status_id AS status_id, array_agg(t.name) AS tag_array
 			FROM   statuses_tags st
@@ -251,8 +252,7 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 			GROUP  BY st.status_id
 		)  t ON statuses.id = t.status_id
 		WHERE reblog.account_id=$1
-		GROUP BY statuses.id, t.tag_array ;`, candidate.AccountId)
-		log.Println("got reblogged statuses")
+		GROUP BY statuses.id, t.tag_array, accounts.username, accounts.domain ;`, candidate.AccountId)
 		if err != nil {
 			log.Println("Error getting account liked statuses: ", err)
 			close(ch)
@@ -260,16 +260,17 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 		}
 		var statuses []models.Status
 		for rows.Next() {
-			status := models.Status{}
+			status := models.Status{
+				Account: models.Account{},
+			}
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Tags,
+				&status.EditedAt, &status.Content, &status.Tags, &status.Account.Username, &status.Account.Domain, 
 			)
 			statuses = append(statuses, status)
 		}
 		ch <- statuses
-		close(ch)
 		return
 	}()
 	return ch
@@ -294,7 +295,7 @@ func (as *AccountReblogedStatusesStream) GetData(candidate models.Candidate) (*[
 	}
 	statuses_chan :=  as.channels[candidate.AccountId]
 	statuses = <-statuses_chan
-	log.Println("done with account reblogged")
+	statuses_chan <- statuses
 	as.data[candidate.AccountId] = statuses
 	return &statuses, nil
 
@@ -321,3 +322,4 @@ func GetStatusesDataStreamMap(candidates []models.Candidate, db_conn *sql.DB) (S
 	return data_stream_map, nil
 
 }
+

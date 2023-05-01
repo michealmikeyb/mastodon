@@ -47,12 +47,12 @@ func (as *AuthorStream) Init(candidates []models.Candidate, db_conn *sql.DB) err
 }
 
 func get_author_channel(candidate models.Candidate) chan models.Account{
-	ch := make(chan models.Account)
+	ch := make(chan models.Account, 1)
 	go func() {
 		author_url := fmt.Sprintf("https://%s/api/v1/accounts/lookup?acct=%s", candidate.AuthorDomain, candidate.AuthorUsername)
 		resp, err := http.Get(author_url)
 		if err != nil {
-			log.Println("Error getting author")
+			log.Println("Error getting author ", err)
 			close(ch)
 			return
 		}
@@ -60,12 +60,11 @@ func get_author_channel(candidate models.Candidate) chan models.Account{
 		var account models.Account
 		err = json.NewDecoder(resp.Body).Decode(&account)
 		if err != nil {
-			log.Println("Error parsing author")
+			log.Println("Error parsing author ", err)
 			close(ch)
 			return
 		}
 		ch <- account
-		close(ch)
 		return
 	}()
 	return ch
@@ -91,7 +90,7 @@ func (as *AuthorStream) GetData(candidate models.Candidate) (*models.Account, er
 	}
 	account_chan :=  as.channels[author_key]
 	account = <-account_chan
-	log.Println("done with author")
+	account_chan <- account
 	as.data[author_key] = account
 	return &account, nil
 
@@ -131,23 +130,20 @@ func (as *AccountStream) Init(candidates []models.Candidate, db_conn *sql.DB) er
 }
 
 func get_account_channel(candidate models.Candidate, db_conn *sql.DB) chan models.Account{
-	ch := make(chan models.Account)
+	ch := make(chan models.Account, 1)
 	go func() {
 		account := models.Account{}
-		log.Println("getting account")
 		err := db_conn.QueryRow(`SELECT username, display_name, locked, discoverable, note, 
 			(SELECT count(*) FROM follows WHERE follows.account_id = accounts.id) AS following_count, 
 			(SELECT count(*) FROM follows WHERE follows.target_account_id = accounts.id) AS follower_count, 
 			(SELECT count(*) FROM statuses WHERE statuses.account_id = accounts.id) AS statuses_count  
 			FROM accounts WHERE accounts.id = $1`, candidate.AccountId).Scan(&account.Username, &account.DisplayName, &account.Locked, &account.Discoverable, &account.Note, &account.FollowingCount, &account.FollowersCount, &account.StatusesCount)
-		log.Println("got account")
 		if err != nil {
 			log.Println("Error receiving records from db %s", err)
 			close(ch)
 			return
 		}
 		ch <- account
-		close(ch)
 		return
 	}()
 	return ch
@@ -173,7 +169,7 @@ func (as *AccountStream) GetData(candidate models.Candidate) (*models.Account, e
 	}
 	account_chan :=  as.channels[candidate.AccountUrl]
 	account = <-account_chan
-	log.Println("done with account")
+	account_chan <- account
 	as.data[candidate.AccountUrl] = account
 	return &account, nil
 

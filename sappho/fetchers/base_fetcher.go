@@ -112,6 +112,7 @@ var AggregateFunctionMap = map[string]Fetcher{
 	"author_like_count": FetchAuthorLikeCount,
 	"account_liked_status_count": FetchAccountLikedStatusCount,
 	"account_rebloged_status_count": FetchAccountReblogedStatusCount,
+	"account_liked_author_status_count": FetchAccountLikedAuthorStatusCount,
 }
 
 
