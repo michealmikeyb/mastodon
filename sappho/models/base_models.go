@@ -19,6 +19,11 @@ type AggregatedCandidate struct {
 	Candidate				Candidate `json:"candidate"`
 }
 
+type RankedCandidate struct {
+	Rank					float32 `json:"rank"`
+	Candidate				Candidate `json:"candidate"`
+}
+
 type Account struct {
 	ID             string    `json:"id"`
 	Username       string    `json:"username"`
