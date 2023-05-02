@@ -288,6 +288,41 @@ class FeedManager
     statuses
   end
 
+  def rank_statuses(statuses)
+    candidates = []
+    for status in statuses do 
+      candidate = {
+        status_domain: status.account.domain,
+        status_external_id: "#{status.url}".split('/')[-1],
+        status_id: "#{status.id}",
+        account_url: status.account.url,
+        account_id: "#{status.account.id}",
+        author_username: status.account.username,
+        author_domain: status.account.domain
+      }
+      candidates.append(candidate)
+    end
+    uri = URI("http://my-mastodon-sappho:8080/get_rankings")
+    headers = {'Content-Type': 'application/json'}
+    res = Net::HTTP.post(uri, candidates.to_json, headers)
+    res_json = JSON.parse(res.body)
+    ranked_statuses = []
+    for status in statuses do
+      rank = 0
+      for candidate_json in res_json do
+        if "#{status.id}" == candidate_json["candidate"]["status_id"] 
+          rank = candidate_json["rank"].round()
+        end
+      end
+      ranked_candidate = {
+        "status": status,
+        "rank": rank
+      }
+      ranked_statuses.append(ranked_candidate)
+    end
+    return ranked_statuses
+  end
+
   # Populate for you feed of account from scratch
   # @param [Account] account
   # @return [void]
@@ -295,11 +330,7 @@ class FeedManager
     limit        = FeedManager::MAX_ITEMS / 2
     aggregate    = account.user&.aggregates_reblogs?
     timeline_key = key(:for_you, account.id)
-
-    account.statuses.limit(limit).each do |status|
-      add_to_feed(:for_you, account.id, status, aggregate_reblogs: aggregate)
-    end
-
+    all_statuses = []
     account.following.includes(:account_stat).find_each do |target_account|
       if redis.zcard(timeline_key) >= limit
         oldest_home_score = redis.zrange(timeline_key, 0, 0, with_scores: true).first.last.to_i
@@ -311,28 +342,30 @@ class FeedManager
         next if last_status_score < oldest_home_score
       end
 
-      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).limit(limit)
+      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).order('created_at DESC').where("created_at >= (?)", 1.day.ago).limit(10)
       crutches = build_crutches(account.id, statuses)
 
       statuses.each do |status|
         next if filter_from_home?(status, account.id, crutches)
-
-        add_to_feed(:for_you, account.id, status, aggregate_reblogs: aggregate)
+        all_statuses.append(status)
       end
 
-      trim(:for_you, account.id)
     end
 
     external_trends = get_external_trends(60)
     crutches = build_crutches(account.id, external_trends)
     external_trends.each do |status|
       next if filter_from_home?(status, account.id, crutches)
-
-      add_to_feed(:for_you, account.id, status, aggregate_reblogs: aggregate)
+      all_statuses.append(status)
     end
+    ranked_statuses = rank_statuses(all_statuses)
+    for candidate in ranked_statuses do 
+      add_to_feed_with_rank(:for_you, account.id, candidate[:status], candidate[:rank], aggregate_reblogs: aggregate)
+    end
+    trim(:for_you, account.id)
   end
 
-# Populate for you feed of account from scratch
+  # Populate for you feed of account from scratch
   # @param [Account] account
   # @return [void]
   def populate_for_you_all_accounts
@@ -595,6 +628,54 @@ class FeedManager
     true
   end
 
+  # Adds a status to an account's feed with a specified rank, returning true if a status was
+  # added, and false if it was not added to the feed. Note that this is
+  # an internal helper: callers must call trim or push updates if
+  # either action is appropriate.
+  # @param [Symbol] timeline_type
+  # @param [Integer] account_id
+  # @param [Status] status
+  # @param [Integer] rank
+  # @param [Boolean] aggregate_reblogs
+  # @return [Boolean]
+  def add_to_feed_with_rank(timeline_type, account_id, status, rank, aggregate_reblogs: true)
+    timeline_key = key(timeline_type, account_id)
+    reblog_key   = key(timeline_type, account_id, 'reblogs')
+
+    if status.reblog? && (aggregate_reblogs.nil? || aggregate_reblogs)
+      # If the original status or a reblog of it is within
+      # REBLOG_FALLOFF statuses from the top, do not re-insert it into
+      # the feed
+      reblog_rank = redis.zrevrank(timeline_key, status.reblog_of_id)
+
+      return false if !reblog_rank.nil? && reblog_rank < FeedManager::REBLOG_FALLOFF
+
+      # The ordered set at `reblog_key` holds statuses which have a reblog
+      # in the top `REBLOG_FALLOFF` statuses of the timeline
+      if redis.zadd(reblog_key, status.id, status.reblog_of_id, nx: true)
+        # This is not something we've already seen reblogged, so we
+        # can just add it to the feed (and note that we're reblogging it).
+        redis.zadd(timeline_key, rank, status.id)
+      else
+        # Another reblog of the same status was already in the
+        # REBLOG_FALLOFF most recent statuses, so we note that this
+        # is an "extra" reblog, by storing it in reblog_set_key.
+        reblog_set_key = key(timeline_type, account_id, "reblogs:#{status.reblog_of_id}")
+        redis.sadd(reblog_set_key, status.id)
+        return false
+      end
+    else
+      # A reblog may reach earlier than the original status because of the
+      # delay of the worker delivering the original status, the late addition
+      # by merging timelines, and other reasons.
+      # If such a reblog already exists, just do not re-insert it into the feed.
+      return false unless redis.zscore(reblog_key, status.id).nil?
+
+      redis.zadd(timeline_key, rank, status.id)
+    end
+
+    true
+  end
   # Removes an individual status from a feed, correctly handling cases
   # with reblogs, and returning true if a status was removed. As with
   # `add_to_feed`, this does not trigger push updates, so callers must

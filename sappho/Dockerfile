@@ -1,32 +1,28 @@
-# Install dependencies and compile to a binary
-FROM golang:1.19-alpine as builder
 
+FROM golang:buster
+
+
+
+# Move to working directory /app
 WORKDIR /app
 
-COPY go.sum go.mod ./
+COPY ./go.mod ./
+COPY ./go.sum ./
+
+# Download dependencies using go mod
 RUN go mod download
 
+# Copy the code into the container
 COPY . .
 
-ENV GIN_MODE=release
-# Define the target architecture so it can still be deployed to an x86 machine if compiled on an ARM machine
-ENV GOOS=linux GOARCH=amd64
-RUN go build -o /bin/sappho .
 
-# Step 2: build a small image that runs the binary
-FROM alpine:3.14
 
-####
-## To ensure the application doesn't run as root, we
-## create a new user and group that it will run as.
-####
-RUN addgroup sappho && adduser -D -G sappho sappho
 
-# copy static executable and change the owner to be the user that will run the application
-COPY --chown=sappho:sappho --from=builder /bin/sappho /bin/sappho
+# Build the application's binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o server ./cmd/server.go
 
-USER boilerplate-user:boilerplate-user
+RUN chmod 777 /app/server
 
-EXPOSE 8080
 
-CMD ["/bin/sappho"]
+# Command to run the application when starting the container
+CMD ["/app/server"]
