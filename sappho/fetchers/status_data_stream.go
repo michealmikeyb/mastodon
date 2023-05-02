@@ -18,14 +18,12 @@ type StatusDataStream interface {
 type CandidateStatusStream struct {
 	candidates []models.Candidate
 	channels map[string]chan models.Status
-	data map[string] models.Status
 }
 
 
 func (as *CandidateStatusStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan models.Status)
-	as.data = make(map[string] models.Status)
 	for _, candidate := range candidates {
 		if _, ok := as.channels[candidate.StatusId] ; !ok {
 			statuses_chan := get_candidate_channel(candidate)
@@ -72,14 +70,13 @@ func (as *CandidateStatusStream) GetData(candidate models.Candidate) (*models.St
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	status, ok := as.data[candidate.StatusId]
-	if ok {
-		return &status, nil
-	}
 	status_chan :=  as.channels[candidate.StatusId]
-	status = <-status_chan
-	status_chan <- status
-	as.data[candidate.StatusId] = status
+	status, ok := <-status_chan
+	if !ok {
+		status = models.Status{}
+	} else {
+		status_chan <- status
+	}
 	return &status, nil
 
 }

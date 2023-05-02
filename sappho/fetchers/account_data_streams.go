@@ -28,14 +28,12 @@ type AccountDataStream interface {
 type AuthorStream struct {
 	candidates []models.Candidate
 	channels map[string]chan models.Account
-	data map[string] models.Account
 }
 
 
 func (as *AuthorStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan models.Account)
-	as.data = make(map[string] models.Account)
 	for _, candidate := range candidates {
 		author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 		if _, ok := as.channels[author_key] ; !ok {
@@ -84,14 +82,13 @@ func (as *AuthorStream) GetData(candidate models.Candidate) (*models.Account, er
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	account, ok := as.data[author_key]
-	if ok {
-		return &account, nil
-	}
 	account_chan :=  as.channels[author_key]
-	account = <-account_chan
-	account_chan <- account
-	as.data[author_key] = account
+	account, ok  := <-account_chan
+	if !ok {
+		account = models.Account{}
+	} else {
+		account_chan <- account
+	}
 	return &account, nil
 
 }
@@ -101,7 +98,6 @@ func (as *AuthorStream) GetData(candidate models.Candidate) (*models.Account, er
 type AccountStream struct {
 	candidates []models.Candidate
 	channels map[string]chan models.Account
-	data map[string] models.Account
 }
 
 func get_postgres_conn() (*sql.DB, error) {
@@ -119,7 +115,6 @@ func get_postgres_conn() (*sql.DB, error) {
 func (as *AccountStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan models.Account)
-	as.data = make(map[string] models.Account)
 	for _, candidate := range candidates {
 		if _, ok := as.channels[candidate.AccountUrl] ; !ok {
 			account_chan := get_account_channel(candidate, db_conn)
@@ -163,14 +158,13 @@ func (as *AccountStream) GetData(candidate models.Candidate) (*models.Account, e
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	account, ok := as.data[candidate.AccountUrl]
-	if ok {
-		return &account, nil
-	}
 	account_chan :=  as.channels[candidate.AccountUrl]
-	account = <-account_chan
-	account_chan <- account
-	as.data[candidate.AccountUrl] = account
+	account, ok  := <-account_chan
+	if !ok {
+		account = models.Account{}
+	} else {
+		account_chan <- account
+	}
 	return &account, nil
 
 }

@@ -20,14 +20,12 @@ type StatusesDataStream interface {
 type AuthorStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
-	data map[string] []models.Status
 }
 
 
 func (as *AuthorStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
-	as.data = make(map[string] []models.Status)
 	for _, candidate := range candidates {
 		author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 		if _, ok := as.channels[author_key] ; !ok {
@@ -91,14 +89,13 @@ func (as *AuthorStatusesStream) GetData(candidate models.Candidate) (*[]models.S
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	statuses, ok := as.data[author_key]
-	if ok {
-		return &statuses, nil
-	}
 	statuses_chan :=  as.channels[author_key]
-	statuses = <-statuses_chan
-	statuses_chan <- statuses
-	as.data[author_key] = statuses
+	statuses, ok := <-statuses_chan
+	if !ok {
+		statuses = []models.Status{}
+	} else {
+		statuses_chan <- statuses
+	}
 	return &statuses, nil
 
 }
@@ -109,14 +106,12 @@ func (as *AuthorStatusesStream) Close() error {
 type AccountLikedStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
-	data map[string] []models.Status
 }
 
 
 func (as *AccountLikedStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
-	as.data = make(map[string] []models.Status)
 	for _, candidate := range candidates {
 		if _, ok := as.channels[candidate.AccountId] ; !ok {
 			statuses_chan := get_account_liked_statuses_channel(candidate, db_conn)
@@ -196,14 +191,13 @@ func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]mo
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	statuses, ok := as.data[candidate.AccountId]
-	if ok {
-		return &statuses, nil
-	}
 	statuses_chan :=  as.channels[candidate.AccountId]
-	statuses = <-statuses_chan
-	statuses_chan <- statuses
-	as.data[candidate.AccountId] = statuses
+	statuses, ok := <-statuses_chan
+	if !ok {
+		statuses = []models.Status{}
+	} else {
+		statuses_chan <- statuses
+	}
 	return &statuses, nil
 
 }
@@ -218,14 +212,12 @@ func (as *AccountLikedStatusesStream)  Close() error {
 type AccountReblogedStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
-	data map[string] []models.Status
 }
 
 
 func (as *AccountReblogedStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
-	as.data = make(map[string] []models.Status)
 	for _, candidate := range candidates {
 		if _, ok := as.channels[candidate.AccountId] ; !ok {
 			statuses_chan := get_account_rebloged_statuses_channel(candidate, db_conn)
@@ -305,14 +297,13 @@ func (as *AccountReblogedStatusesStream) GetData(candidate models.Candidate) (*[
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
-	statuses, ok := as.data[candidate.AccountId]
-	if ok {
-		return &statuses, nil
-	}
 	statuses_chan :=  as.channels[candidate.AccountId]
-	statuses = <-statuses_chan
-	statuses_chan <- statuses
-	as.data[candidate.AccountId] = statuses
+	statuses, ok := <-statuses_chan
+	if !ok {
+		statuses = []models.Status{}
+	} else {
+		statuses_chan <- statuses
+	}
 	return &statuses, nil
 
 }

@@ -49,12 +49,10 @@ func get_postgres_conn() (*sql.DB, error) {
 }
 
 
-
-
 func main() {
 	router := gin.Default()
-	router.GET("/get_aggregates", getAggregatesHandler)
-	router.GET("/get_rankings", getRankingsHandler)
+	router.POST("/get_aggregates", getAggregatesHandler)
+	router.POST("/get_rankings", getRankingsHandler)
 	router.Run(":8080")
 }
 
@@ -66,16 +64,11 @@ func getAggregatesHandler(c *gin.Context) {
 		c.IndentedJSON(http.StatusServiceUnavailable, map[string]string{"error": "error connecting to database"})
 	}
 	defer db_conn.Close()
-	candidate := models.Candidate{
-		StatusExternalId: "110284314158405915",
-		StatusDomain: "socel.net",
-		StatusId: "110284314157790330",
-		AuthorUsername: "BGP",
-		AuthorDomain: "socel.net",
-		AccountId: "110216720936469695",
+	var candidates []models.Candidate
+	err = c.BindJSON(&candidates)
+	if err != nil {
+		log.Panic(err)
 	}
-	candidates := make([]models.Candidate, 1)
-	candidates[0] = candidate
 	res, err := fetchers.GetAggregates(candidates, db_conn)
 	if err != nil {
 		log.Panic(err)
@@ -89,16 +82,11 @@ func getRankingsHandler(c *gin.Context) {
 		c.IndentedJSON(http.StatusServiceUnavailable, map[string]string{"error": "error connecting to database"})
 	}
 	defer db_conn.Close()
-	candidate := models.Candidate{
-		StatusExternalId: "110284314158405915",
-		StatusDomain: "socel.net",
-		StatusId: "110284314157790330",
-		AuthorUsername: "BGP",
-		AuthorDomain: "socel.net",
-		AccountId: "110216720936469695",
+	var candidates []models.Candidate
+	err = c.BindJSON(&candidates)
+	if err != nil {
+		log.Panic(err)
 	}
-	candidates := make([]models.Candidate, 1)
-	candidates[0] = candidate
 	aggregated_candidates, err := fetchers.GetAggregates(candidates, db_conn)
 	if err != nil {
 		log.Panic(err)
@@ -109,7 +97,6 @@ func getRankingsHandler(c *gin.Context) {
 		rank = 0.0
 		for agg_key, value := range aggregate_weights {
 			weighted_aggregate := float32(agg_cand.Aggregates[agg_key]) * value
-			log.Println("Aggregate: ", agg_key, " Weighted: ", weighted_aggregate)
 			rank = rank + weighted_aggregate
 		}
 		ranked_candidates[i] = models.RankedCandidate{
