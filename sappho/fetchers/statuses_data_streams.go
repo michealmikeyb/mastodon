@@ -11,22 +11,24 @@ import (
 )
 
 
+// A data stream for an array of statuses
 type StatusesDataStream interface {
 	Init(candidates []models.Candidate, db_conn *sql.DB) error
 	GetData(candidate models.Candidate) (*[]models.Status, error)
-	Close() error
 }
 
+// A data stream for the statuses posted by the author
 type AuthorStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
 }
 
-
+// initialize the author status stream with a set of candidates
 func (as *AuthorStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
 	for _, candidate := range candidates {
+		// combine the author username and domain to get a unique author key
 		author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 		if _, ok := as.channels[author_key] ; !ok {
 			statuses_chan := get_author_statuses_channel(candidate)
@@ -36,13 +38,16 @@ func (as *AuthorStatusesStream) Init(candidates []models.Candidate, db_conn *sql
 	return nil
 }
 
+// Get a channel to send author status data to and start
+// a function to fetch that data and send it through the channel
 func get_author_statuses_channel(candidate models.Candidate) chan []models.Status{
 	ch := make(chan []models.Status, 1)
 	go func() {
+		// first fetch the account by looking it up to get the account id
 		author_lookup_url := fmt.Sprintf("https://%s/api/v1/accounts/lookup?acct=%s", candidate.AuthorDomain, candidate.AuthorUsername)
 		resp, err := http.Get(author_lookup_url)
 		if err != nil {
-			log.Println("Error getting author")
+			log.Println("Error getting author", err)
 			close(ch)
 			return
 		}
@@ -50,14 +55,15 @@ func get_author_statuses_channel(candidate models.Candidate) chan []models.Statu
 		var account models.Account
 		err = json.NewDecoder(resp.Body).Decode(&account)
 		if err != nil {
-			log.Println("Error parsing author")
+			log.Println("Error parsing author", err)
 			close(ch)
 			return
 		}
+		// use the account id to get the last 20 statuses from the author
 		statuses_url := fmt.Sprintf("https://%s/api/v1/accounts/%s/statuses?exclude_replies=true", candidate.AuthorDomain, account.ID)
 		resp, err = http.Get(statuses_url)
 		if err != nil {
-			log.Println("Error getting author statuses")
+			log.Println("Error getting author statuses", err)
 			close(ch)
 			return
 		}
@@ -75,6 +81,7 @@ func get_author_statuses_channel(candidate models.Candidate) chan []models.Statu
 	return ch
 }
 
+// used to confirm candidate present in list
 func (as *AuthorStatusesStream) has_candidate(candidate models.Candidate) bool {
 	for _, c := range as.candidates {
 		if c == candidate {
@@ -83,7 +90,8 @@ func (as *AuthorStatusesStream) has_candidate(candidate models.Candidate) bool {
 	}
 	return false
 }
-
+// Get author status data from the channel and then push it back in
+// in case another process needs it
 func (as *AuthorStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	author_key := fmt.Sprintf("%s@%s", candidate.AuthorUsername, candidate.AuthorDomain)
 	if ! as.has_candidate(candidate) {
@@ -91,24 +99,24 @@ func (as *AuthorStatusesStream) GetData(candidate models.Candidate) (*[]models.S
 	}
 	statuses_chan :=  as.channels[author_key]
 	statuses, ok := <-statuses_chan
+	// if channel is closed just return an empty list
 	if !ok {
 		statuses = []models.Status{}
+	// else send the statuses back in the channel in case another process needs them
 	} else {
 		statuses_chan <- statuses
 	}
 	return &statuses, nil
 
 }
-func (as *AuthorStatusesStream) Close() error {
-	return nil
-}
 
+// A data stream for the statuses liked by the account
 type AccountLikedStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
 }
 
-
+// initialize the account liked stream with a set of candidates
 func (as *AccountLikedStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
@@ -121,9 +129,12 @@ func (as *AccountLikedStatusesStream) Init(candidates []models.Candidate, db_con
 	return nil
 }
 
+// Get a channel to send account liked statuses data to and start
+// a function to fetch that data and send it through the channel
 func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql.DB) chan []models.Status{
 	ch := make(chan []models.Status, 1)
 	go func() {
+		// get the account liked statuses from the local db
 		rows, err := db_conn.Query(`SELECT statuses.id, statuses.created_at, statuses.in_reply_to_id, statuses.in_reply_to_account_id, 
 		statuses.sensitive, statuses.spoiler_text, statuses.visibility, statuses.language, statuses.uri, 
 		statuses.url, 
@@ -153,6 +164,7 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 			return
 		}
 		var statuses []models.Status
+		// after fetching scan the statuses into a status list
 		for rows.Next() {
 			var tag_strings []string
 			status := models.Status{
@@ -178,6 +190,7 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 	return ch
 }
 
+// used to confirm candidate present in list
 func (as *AccountLikedStatusesStream) has_candidate(candidate models.Candidate) bool {
 	for _, c := range as.candidates {
 		if c == candidate {
@@ -187,14 +200,18 @@ func (as *AccountLikedStatusesStream) has_candidate(candidate models.Candidate) 
 	return false
 }
 
+// Get account liked statuses data from the channel and then push it back in
+// in case another process needs it
 func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	statuses_chan :=  as.channels[candidate.AccountId]
 	statuses, ok := <-statuses_chan
+	// if channel is closed just return an empty list
 	if !ok {
 		statuses = []models.Status{}
+	// else send the statuses back in the channel in case another process needs them
 	} else {
 		statuses_chan <- statuses
 	}
@@ -202,19 +219,13 @@ func (as *AccountLikedStatusesStream) GetData(candidate models.Candidate) (*[]mo
 
 }
 
-func (as *AccountLikedStatusesStream)  Close() error {
-	for _, ch := range as.channels {
-		close(ch)
-	}
-	return nil
-}
-
+// A data stream for the statuses rebloged by the account
 type AccountReblogedStatusesStream struct {
 	candidates []models.Candidate
 	channels map[string]chan []models.Status
 }
 
-
+// initialize the account rebloged stream with a set of candidates
 func (as *AccountReblogedStatusesStream) Init(candidates []models.Candidate, db_conn *sql.DB) error {
 	as.candidates = candidates
 	as.channels = make(map[string]chan []models.Status)
@@ -227,9 +238,12 @@ func (as *AccountReblogedStatusesStream) Init(candidates []models.Candidate, db_
 	return nil
 }
 
+// Get a channel to send account rebloged statuses data to and start
+// a function to fetch that data and send it through the channel
 func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *sql.DB) chan []models.Status{
 	ch := make(chan []models.Status, 1)
 	go func() {
+		// get the account rebloged statuses from the local db
 		rows, err := db_conn.Query(`SELECT statuses.id, statuses.created_at, statuses.in_reply_to_id, statuses.in_reply_to_account_id, 
 		statuses.sensitive, statuses.spoiler_text, statuses.visibility, statuses.language, statuses.uri, 
 		statuses.url, 
@@ -259,6 +273,7 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 			return
 		}
 		var statuses []models.Status
+		// after fetching scan the statuses into a status list
 		for rows.Next() {
 			var tag_strings []string
 			status := models.Status{
@@ -284,6 +299,7 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 	return ch
 }
 
+// used to confirm candidate present in list
 func (as *AccountReblogedStatusesStream) has_candidate(candidate models.Candidate) bool {
 	for _, c := range as.candidates {
 		if c == candidate {
@@ -293,14 +309,18 @@ func (as *AccountReblogedStatusesStream) has_candidate(candidate models.Candidat
 	return false
 }
 
+// Get account rebloged statuses data from the channel and then push it back in
+// in case another process needs it
 func (as *AccountReblogedStatusesStream) GetData(candidate models.Candidate) (*[]models.Status, error) {
 	if ! as.has_candidate(candidate) {
 		return nil, fmt.Errorf("Candidate not in list with status url: %s and account url %s", candidate.StatusId, candidate.AccountUrl)
 	}
 	statuses_chan :=  as.channels[candidate.AccountId]
 	statuses, ok := <-statuses_chan
+	// if channel is closed just return an empty list
 	if !ok {
 		statuses = []models.Status{}
+	// else send the statuses back in the channel in case another process needs them
 	} else {
 		statuses_chan <- statuses
 	}
@@ -308,12 +328,10 @@ func (as *AccountReblogedStatusesStream) GetData(candidate models.Candidate) (*[
 
 }
 
-func (as *AccountReblogedStatusesStream) Close() error {
-	return nil
-}
-
+// A data stream map mapping the stream type to a datastream
 type StatusesDataStreamMap map[string] StatusesDataStream
 
+// Create an statuses datastream map and initialize all the datastreams
 func GetStatusesDataStreamMap(candidates []models.Candidate, db_conn *sql.DB) (StatusesDataStreamMap, error) {
 	data_stream_map := StatusesDataStreamMap{}
 	data_stream_map["author_statuses_stream"] = &AuthorStatusesStream{}

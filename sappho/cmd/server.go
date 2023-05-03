@@ -16,22 +16,36 @@ import (
 )
 
 var	aggregate_weights = map[string]float32 {
+	// Number of statuses by the author that the account liked
 	"account_liked_author_status_count":	10.0,
+	// Total number of statuses liked by the account
 	"account_liked_status_count": 0.0,
+	// Number of statuses that have a tag that the candidate has that the account liked
 	"account_liked_tag_status_count": 10.0,
+	// Number of statuses by the author that the account rebloged
 	"account_rebloged_author_status_count": 50.0,
+	// Total number of statuses the account rebloged
 	"account_rebloged_status_count": 0,
+	// Number of statuses that have a tag that the candidate has that the account rebloged
 	"account_rebloged_tag_status_count": 40.0,
+	// Number of followers the author has
 	"author_follower_count": 0.004,
+	// Number of likes on authors last 20 statuses
 	"author_like_count": 0.4,
+	// Number of reblogs on authors last 20 statuses
 	"author_reblog_count": 0.8,
+	// Number of replies on authors last 20 statuses
 	"author_reply_count": 0.6,
+	// Number of likes for candidate status
 	"candidate_status_like_count": 1.0,
+	// Number of reblogs for candidate status
 	"candidate_status_reblog_count": 2.0,
+	// Number of replies for candidate status
 	"candidate_status_reply_count": 1.5,
 
 }
 
+// Get a postgres connection using environment variables
 func get_postgres_conn() (*sql.DB, error) {
 	host := os.Getenv("DB_HOST")
 	user := os.Getenv("DB_USER")
@@ -57,7 +71,8 @@ func main() {
 }
 
 
-
+// takes in a list of candidates in json format and returns
+// a list of aggregated candidates with the candidate and the aggregates as a json
 func getAggregatesHandler(c *gin.Context) {
 	db_conn, err := get_postgres_conn()
 	if err != nil {
@@ -76,6 +91,8 @@ func getAggregatesHandler(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, res)
 }
 
+// takes a list of candidates in json format and returns
+// a list of ranked candidates with the candidate and its ranking as json
 func getRankingsHandler(c *gin.Context) {
 	db_conn, err := get_postgres_conn()
 	if err != nil {
