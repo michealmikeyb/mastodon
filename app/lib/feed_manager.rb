@@ -303,15 +303,15 @@ class FeedManager
   # Get ranks from statuses using sappho
   # @param [[]Status] statuses
   # @return [Hash]
-  def rank_statuses(statuses)
+  def rank_statuses(statuses, account)
     candidates = []
     for status in statuses do 
       candidate = {
         status_domain: status.account.domain,
         status_external_id: "#{status.url}".split('/')[-1],
         status_id: "#{status.id}",
-        account_url: status.account.url,
-        account_id: "#{status.account.id}",
+        account_url: account.url,
+        account_id: "#{account.id}",
         author_username: status.account.username,
         author_domain: status.account.domain
       }
@@ -385,7 +385,7 @@ class FeedManager
       next if filter_from_home?(status, account.id, crutches)
       all_statuses.append(status)
     end
-    ranked_statuses = rank_statuses(all_statuses)
+    ranked_statuses = rank_statuses(all_statuses, account)
     for candidate in ranked_statuses do 
       add_to_feed_with_rank(:for_you, account.id, candidate[:status], candidate[:rank], aggregate_reblogs: aggregate)
     end
@@ -435,7 +435,7 @@ class FeedManager
           next if filter_from_home?(status, account.id, crutches)
           all_statuses.append(status)
         end
-        ranked_statuses = rank_statuses(all_statuses)
+        ranked_statuses = rank_statuses(all_statuses, account)
         for candidate in ranked_statuses do 
           add_to_feed_with_rank(:for_you, account.id, candidate[:status], candidate[:rank], aggregate_reblogs: aggregate)
         end
