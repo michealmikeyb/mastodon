@@ -19,7 +19,15 @@ class ForYouFeed < Feed
       min_rank = redis.zrank(key, min_id)
       unhydrated = redis.zrangebyscore(key, "(#{min_rank}", "(#{max_rank}", limit: [0, limit], with_scores: true).map(&:first).map(&:to_i)
     end
-
-    Status.where(id: unhydrated).cache_ids
+    unordered_statuses = Status.where(id: unhydrated).cache_ids
+    ordered_statuses = []
+    for status_id in unhydrated do 
+      for status in unordered_statuses do
+        if status.id == status_id
+          ordered_statuses.append(status)
+        end
+      end
+    end
+    ordered_statuses
   end
 end
