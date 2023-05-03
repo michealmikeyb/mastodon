@@ -277,6 +277,9 @@ class FeedManager
     end
   end
 
+  # Get trends from other server as the main one doesn't have many users
+  # @param [Integer] ammount
+  # @return [[]Status]
   def get_external_trends(amount)
     statuses = []
     offset = 0
@@ -297,6 +300,9 @@ class FeedManager
     statuses
   end
 
+  # Get ranks from statuses using sappho
+  # @param [[]Status] statuses
+  # @return [Hash]
   def rank_statuses(statuses)
     candidates = []
     for status in statuses do 
