@@ -31,6 +31,7 @@ const initialTimeline = ImmutableMap({
   items: ImmutableList(),
 });
 
+
 const expandNormalizedTimeline = (state, timeline, statuses, next, isPartial, isLoadingRecent, usePendingItems) => {
   // This method is pretty tricky because:
   // - existing items in the timeline might be out of order
@@ -53,44 +54,50 @@ const expandNormalizedTimeline = (state, timeline, statuses, next, isPartial, is
       mMap.update(usePendingItems ? 'pendingItems' : 'items', ImmutableList(), oldIds => {
         const newIds = statuses.map(status => status.get('id'));
 
-        // Now this gets tricky, as we don't necessarily know for sure where the gap to fill is
-        // and some items in the timeline may not be properly ordered.
+        if (timeline == "for_you") {
+          // for you timeline is pre sorted
+          return oldIds.concat(newIds);
+        } 
+        else {
+          // Now this gets tricky, as we don't necessarily know for sure where the gap to fill is
+          // and some items in the timeline may not be properly ordered.
 
-        // However, we know that `newIds.last()` is the oldest item that was requested and that
-        // there is no “hole” between `newIds.last()` and `newIds.first()`.
+          // However, we know that `newIds.last()` is the oldest item that was requested and that
+          // there is no “hole” between `newIds.last()` and `newIds.first()`.
 
-        // First, find the furthest (if properly sorted, oldest) item in the timeline that is
-        // newer than the oldest fetched one, as it's most likely that it delimits the gap.
-        // Start the gap *after* that item.
-        const lastIndex = oldIds.findLastIndex(id => id !== null && compareId(id, newIds.last()) >= 0) + 1;
+          // First, find the furthest (if properly sorted, oldest) item in the timeline that is
+          // newer than the oldest fetched one, as it's most likely that it delimits the gap.
+          // Start the gap *after* that item.
+          const lastIndex = oldIds.findLastIndex(id => id !== null && compareId(id, newIds.last()) >= 0) + 1;
 
-        // Then, try to find the furthest (if properly sorted, oldest) item in the timeline that
-        // is newer than the most recent fetched one, as it delimits a section comprised of only
-        // items older or within `newIds` (or that were deleted from the server, so should be removed
-        // anyway).
-        // Stop the gap *after* that item.
-        const firstIndex = oldIds.take(lastIndex).findLastIndex(id => id !== null && compareId(id, newIds.first()) > 0) + 1;
+          // Then, try to find the furthest (if properly sorted, oldest) item in the timeline that
+          // is newer than the most recent fetched one, as it delimits a section comprised of only
+          // items older or within `newIds` (or that were deleted from the server, so should be removed
+          // anyway).
+          // Stop the gap *after* that item.
+          const firstIndex = oldIds.take(lastIndex).findLastIndex(id => id !== null && compareId(id, newIds.first()) > 0) + 1;
 
-        let insertedIds = ImmutableOrderedSet(newIds).withMutations(insertedIds => {
-          // It is possible, though unlikely, that the slice we are replacing contains items older
-          // than the elements we got from the API. Get them and add them back at the back of the
-          // slice.
-          const olderIds = oldIds.slice(firstIndex, lastIndex).filter(id => id !== null && compareId(id, newIds.last()) < 0);
-          insertedIds.union(olderIds);
+          let insertedIds = ImmutableOrderedSet(newIds).withMutations(insertedIds => {
+            // It is possible, though unlikely, that the slice we are replacing contains items older
+            // than the elements we got from the API. Get them and add them back at the back of the
+            // slice.
+            const olderIds = oldIds.slice(firstIndex, lastIndex).filter(id => id !== null && compareId(id, newIds.last()) < 0);
+            insertedIds.union(olderIds);
 
-          // Make sure we aren't inserting duplicates
-          insertedIds.subtract(oldIds.take(firstIndex), oldIds.skip(lastIndex));
-        }).toList();
+            // Make sure we aren't inserting duplicates
+            insertedIds.subtract(oldIds.take(firstIndex), oldIds.skip(lastIndex));
+          }).toList();
 
-        // Finally, insert a gap marker if the data is marked as partial by the server
-        if (isPartial && (firstIndex === 0 || oldIds.get(firstIndex - 1) !== null)) {
-          insertedIds = insertedIds.unshift(null);
+          // Finally, insert a gap marker if the data is marked as partial by the server
+          if (isPartial && (firstIndex === 0 || oldIds.get(firstIndex - 1) !== null)) {
+            insertedIds = insertedIds.unshift(null);
+          }
+
+          return oldIds.take(firstIndex).concat(
+            insertedIds,
+            oldIds.skip(lastIndex),
+          );
         }
-
-        return oldIds.take(firstIndex).concat(
-          insertedIds,
-          oldIds.skip(lastIndex),
-        );
       });
     }
   }));
