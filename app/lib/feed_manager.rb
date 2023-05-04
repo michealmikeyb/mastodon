@@ -284,18 +284,16 @@ class FeedManager
     statuses = []
     offset = 0
     limit = 20
-    while statuses.length() < amount do
+    while statuses.length < amount
       uri_string = "https://mastodon.social/api/v1/trends/statuses?limit=#{limit}&offset=#{offset}"
       uri = URI(uri_string)
       res = Net::HTTP.get_response(uri)
       res_json = JSON.parse(res.body)
-      for status_json in res_json do
+      res_json.each do |status_json|
         status = FetchRemoteStatusService.new.call(status_json['url'])
-        unless status.nil? then
-          statuses.append(status)
-        end
+        statuses.append(status) unless status.nil?
       end
-      offset = offset + limit
+      offset += limit
     end
     statuses
   end
@@ -305,54 +303,51 @@ class FeedManager
   # @return [Hash]
   def rank_statuses(statuses, account)
     candidates = []
-    for status in statuses do 
+    statuses.each do |status|
       candidate = {
         status_domain: status.account.domain,
-        status_external_id: "#{status.url}".split('/')[-1],
-        status_id: "#{status.id}",
+        status_external_id: status.url.to_s.split('/')[-1],
+        status_id: status.id.to_s,
         account_url: account.url,
-        account_id: "#{account.id}",
+        account_id: account.id.to_s,
         author_username: status.account.username,
-        author_domain: status.account.domain
+        author_domain: status.account.domain,
       }
       candidates.append(candidate)
     end
     # get ranks from sappho
-    uri = URI("http://my-mastodon-sappho:8080/get_rankings")
-    headers = {'Content-Type': 'application/json'}
+    uri = URI('http://my-mastodon-sappho:8080/get_rankings')
+    headers = { 'Content-Type': 'application/json' }
     res = Net::HTTP.post(uri, candidates.to_json, headers)
     res_json = JSON.parse(res.body)
     ranked_statuses = []
-    # used to downrank succesive posts by same account to mix up feed
-    account_downranks = {}
-    for status in statuses do
+    negative_rank = 0
+    statuses.each do |status|
       rank = 0
-      for candidate_json in res_json do
-        if "#{status.id}" == candidate_json["candidate"]["status_id"] 
-          rank = candidate_json["rank"].round()
-        end
+      res_json.each do |candidate_json|
+        next unless status.id.to_s == candidate_json['candidate']['status_id']
+
+        # multiply by thousand to get more variation in ranks
+        rank = candidate_json['rank'] * 1000
+        rank = rank.round
       end
-      #down ranks successive account posts by 0.75
-      if account_downranks.has_key?(status.account.id)
-        rank = rank * account_downranks[status.account.id]
-        rank = rank.round()
-        account_downranks[status.account.id] = account_downranks[status.account.id] * FeedManager::ACCOUNT_DOWNRANK_COEFFICIENT
-      else
-        account_downranks[status.account.id] = FeedManager::ACCOUNT_DOWNRANK_COEFFICIENT
+      if rank.zero?
+        rank = 0 - negative_rank
+        negative_rank += 1
       end
       ranked_candidate = {
-        "status": status,
-        "rank": rank
+        status: status,
+        rank: rank,
       }
       ranked_statuses.append(ranked_candidate)
     end
-    return ranked_statuses
+    ranked_statuses
   end
 
   # Populate for you feed of account from scratch
   # @param [Account] account
   # @return [void]
-  def populate_for_you(account)
+  def populate_for_you(account, external_trends = nil)
     limit        = FeedManager::MAX_ITEMS / 2
     aggregate    = account.user&.aggregates_reblogs?
     timeline_key = key(:for_you, account.id)
@@ -369,24 +364,25 @@ class FeedManager
         next if last_status_score < oldest_home_score
       end
 
-      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).order('created_at DESC').where("created_at >= (?)", 1.day.ago).limit(FeedManager::MAX_ITEMS)
+      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).order('created_at DESC').where('created_at >= (?)', 1.day.ago).limit(FeedManager::MAX_ITEMS)
       crutches = build_crutches(account.id, statuses)
 
       statuses.each do |status|
         next if filter_from_home?(status, account.id, crutches)
+
         all_statuses.append(status)
       end
-
     end
 
-    external_trends = get_external_trends(60)
+    external_trends = get_external_trends(60) if external_trends.nil?
     crutches = build_crutches(account.id, external_trends)
     external_trends.each do |status|
       next if filter_from_home?(status, account.id, crutches)
+
       all_statuses.append(status)
     end
     ranked_statuses = rank_statuses(all_statuses, account)
-    for candidate in ranked_statuses do 
+    ranked_statuses.each do |candidate|
       add_to_feed_with_rank(:for_you, account.id, candidate[:status], candidate[:rank], aggregate_reblogs: aggregate)
     end
     trim(:for_you, account.id)
@@ -396,52 +392,17 @@ class FeedManager
   # @param [Account] account
   # @return [void]
   def populate_for_you_all_accounts
-    puts("getting trends")
+    Rails.logger.debug('getting trends')
     external_trends = get_external_trends(60)
-    puts("got trends")
+    Rails.logger.debug('got trends')
     clean_feeds!(:for_you, Account.all.pluck(:id))
     Account.all.each do |account|
-      if account.local?
-        account_name = account.username
-        puts("Building feed for account: #{account_name}")
-        limit        = FeedManager::MAX_ITEMS / 2
-        aggregate    = account.user&.aggregates_reblogs?
-        timeline_key = key(:for_you, account.id)
-        all_statuses = []
+      next unless account.local?
 
-        account.following.includes(:account_stat).find_each do |target_account|
-          if redis.zcard(timeline_key) >= limit
-            oldest_home_score = redis.zrange(timeline_key, 0, 0, with_scores: true).first.last.to_i
-            last_status_score = Mastodon::Snowflake.id_at(target_account.last_status_at)
-    
-            # If the feed is full and this account has not posted more recently
-            # than the last item on the feed, then we can skip the whole account
-            # because none of its statuses would stay on the feed anyway
-            next if last_status_score < oldest_home_score
-          end
-    
-          statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).order('created_at DESC').where("created_at >= (?)", 1.day.ago).limit(10)
-          crutches = build_crutches(account.id, statuses)
-    
-          statuses.each do |status|
-            next if filter_from_home?(status, account.id, crutches)
-            all_statuses.append(status)
-          end
-    
-        end
-    
-        crutches = build_crutches(account.id, external_trends)
-        external_trends.each do |status|
-          next if filter_from_home?(status, account.id, crutches)
-          all_statuses.append(status)
-        end
-        ranked_statuses = rank_statuses(all_statuses, account)
-        for candidate in ranked_statuses do 
-          add_to_feed_with_rank(:for_you, account.id, candidate[:status], candidate[:rank], aggregate_reblogs: aggregate)
-        end
-      end
+      populate_for_you(account, external_trends)
     end
   end
+
   # Completely clear multiple feeds at once
   # @param [Symbol] type
   # @param [Array<Integer>] ids
@@ -702,6 +663,7 @@ class FeedManager
 
     true
   end
+
   # Removes an individual status from a feed, correctly handling cases
   # with reblogs, and returning true if a status was removed. As with
   # `add_to_feed`, this does not trigger push updates, so callers must

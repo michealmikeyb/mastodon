@@ -63,5 +63,4 @@ module Mastodon
       say('OK', :green)
     end
   end
-
 end
