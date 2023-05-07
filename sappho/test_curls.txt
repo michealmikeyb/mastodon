@@ -1,0 +1,1 @@
+curl -vX POST http://localhost:8080/get_rankings -d @test.json --header "Content-Type: application/json"

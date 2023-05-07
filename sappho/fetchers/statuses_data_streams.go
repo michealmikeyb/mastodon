@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"database/sql"
 	"github.com/lib/pq"
+	"github.com/michealmikeyb/mastodon/sappho/utils"
 )
 
 
@@ -142,7 +143,7 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 		COUNT(reblogs.id) AS reblogs_count,
 		COUNT(status_favourites.id) AS favourites_count,
 		statuses.edited_at, statuses.text,
-		accounts.username, accounts.domain, 
+		accounts.username, accounts.domain, statuses.embedding,
 		t.tag_array
 		FROM favourites
 		LEFT JOIN statuses ON favourites.status_id=statuses.id 
@@ -173,7 +174,8 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&tag_strings),
+				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, 
+				pq.Array(&status.Embedding), pq.Array(&tag_strings),
 			)
 			var tags []models.Tag
 			for _, tag := range tag_strings {
@@ -183,6 +185,14 @@ func get_account_liked_statuses_channel(candidate models.Candidate, db_conn *sql
 			}
 			status.Tags = tags
 			statuses = append(statuses, status)
+		}
+		referenced_statuses := make([]*models.Status, len(statuses))
+		for i, _ := range statuses {
+			referenced_statuses[i] = &statuses[i]
+		}
+		utils.GetStatusEmbeddingBulk(referenced_statuses, db_conn)
+		for i, ref_status := range referenced_statuses {
+			statuses[i] = *ref_status
 		}
 		ch <- statuses
 		return
@@ -251,7 +261,7 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 		COUNT(reblogs.id) AS reblogs_count,
 		COUNT(status_favourites.id) AS favourites_count,
 		statuses.edited_at, statuses.text,
-		accounts.username, accounts.domain,
+		accounts.username, accounts.domain, statuses.embedding,
 		t.tag_array
 		FROM statuses reblog
 		INNER JOIN statuses ON reblog.reblog_of_id=statuses.id 
@@ -282,7 +292,8 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 			rows.Scan(&status.ID, &status.CreatedAt, &status.InReplyToID, &status.InReplyToAccountID, 
 				&status.Sensitive, &status.SpoilerText, &status.Visibility, &status.Language, &status.URI, 
 				&status.URL, &status.RepliesCount, &status.ReblogsCount, &status.FavouritesCount,
-				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, pq.Array(&tag_strings),
+				&status.EditedAt, &status.Content, &status.Account.Username, &status.Account.Domain, 
+				pq.Array(&status.Embedding), pq.Array(&tag_strings),
 			)
 			var tags []models.Tag
 			for _, tag := range tag_strings {
@@ -292,6 +303,14 @@ func get_account_rebloged_statuses_channel(candidate models.Candidate, db_conn *
 			}
 			status.Tags = tags
 			statuses = append(statuses, status)
+		}
+		referenced_statuses := make([]*models.Status, len(statuses))
+		for i, _ := range statuses {
+			referenced_statuses[i] = &statuses[i]
+		}
+		utils.GetStatusEmbeddingBulk(referenced_statuses, db_conn)
+		for i, ref_status := range referenced_statuses {
+			statuses[i] = *ref_status
 		}
 		ch <- statuses
 		return
@@ -347,4 +366,3 @@ func GetStatusesDataStreamMap(candidates []models.Candidate, db_conn *sql.DB) (S
 	return data_stream_map, nil
 
 }
-

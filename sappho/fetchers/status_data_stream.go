@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"github.com/michealmikeyb/mastodon/sappho/models"
+	"github.com/michealmikeyb/mastodon/sappho/utils"
 	"fmt"
 	"database/sql"
 )
@@ -27,7 +28,7 @@ func (as *CandidateStatusStream) Init(candidates []models.Candidate, db_conn *sq
 	as.channels = make(map[string]chan models.Status)
 	for _, candidate := range candidates {
 		if _, ok := as.channels[candidate.StatusId] ; !ok {
-			statuses_chan := get_candidate_channel(candidate)
+			statuses_chan := get_candidate_channel(candidate, db_conn)
 			as.channels[candidate.StatusId] = statuses_chan
 		}
 	}
@@ -36,7 +37,7 @@ func (as *CandidateStatusStream) Init(candidates []models.Candidate, db_conn *sq
 
 // get the candidate status from the instance of the status to get the most
 // accurate information on it
-func get_candidate_channel(candidate models.Candidate) chan models.Status{
+func get_candidate_channel(candidate models.Candidate, db_conn *sql.DB) chan models.Status{
 	ch := make(chan models.Status, 1)
 	go func() {
 		// get the status from the instance of the status using its domain and external id
@@ -55,6 +56,9 @@ func get_candidate_channel(candidate models.Candidate) chan models.Status{
 			close(ch)
 			return
 		}
+		// set to the candidate status id because the status id from the response is the external id
+		status.ID = candidate.StatusId
+		utils.GetStatusEmbedding(&status, db_conn)
 		ch <- status
 		return
 	}()

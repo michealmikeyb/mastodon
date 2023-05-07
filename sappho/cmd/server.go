@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"sort"
 
 	_ "github.com/lib/pq"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/michealmikeyb/mastodon/sappho/models"
 )
 
+const (
+	author_downrank_coefficient = 0.75
+)
 var	aggregate_weights = map[string]float32 {
 	// Number of statuses by the author that the account liked
 	"account_liked_author_status_count":	10.0,
@@ -42,7 +46,43 @@ var	aggregate_weights = map[string]float32 {
 	"candidate_status_reblog_count": 2.0,
 	// Number of replies for candidate status
 	"candidate_status_reply_count": 1.5,
+	// average similarity between the candidate status open ai embedding 
+	// and the average embedding for all the statuses liked by the account
+	// will be in the 0 - 1000 range
+	"average_like_embedding_similarity": 2,
+	// average similarity between the candidate status open ai embedding 
+	// and the average embedding for all the statuses rebloged by the account
+	// will be in the 0 - 1000 range
+	"average_reblog_embedding_similarity": 3,
 
+}
+
+type ByRank []models.RankedCandidate
+
+func (a ByRank) Len() int           { return len(a) }
+func (a ByRank) Less(i, j int) bool { return a[i].Rank < a[j].Rank }
+func (a ByRank) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+func author_downranker(candidates []models.RankedCandidate) []models.RankedCandidate {
+	author_downranks := make(map[string]float32)
+	sort.Sort(ByRank(candidates))
+	downranked_candidates := make([]models.RankedCandidate, len(candidates))
+	for i, candidate := range candidates {
+		author_key := fmt.Sprintf("%s@%s", candidate.Candidate.AuthorUsername, candidate.Candidate.AuthorDomain)
+		downrank, ok := author_downranks[author_key]
+		downranked_candidate := models.RankedCandidate{
+			Candidate: candidate.Candidate,
+			Rank: candidate.Rank,
+		}
+		if ok {
+			downranked_candidate.Rank = downranked_candidate.Rank * downrank
+			author_downranks[author_key] = downrank * author_downrank_coefficient
+		} else {
+			author_downranks[author_key] = author_downrank_coefficient
+		}
+		downranked_candidates[i] = downranked_candidate
+	}
+	return downranked_candidates
 }
 
 // Get a postgres connection using environment variables
@@ -121,5 +161,6 @@ func getRankingsHandler(c *gin.Context) {
 			Rank: rank,
 		}
 	}
-	c.IndentedJSON(http.StatusOK, ranked_candidates)
+	downranked_candidates := author_downranker(ranked_candidates)
+	c.IndentedJSON(http.StatusOK, &downranked_candidates)
 }

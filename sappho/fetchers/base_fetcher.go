@@ -16,7 +16,14 @@ package fetchers
 import (
 	"log"
 	"github.com/michealmikeyb/mastodon/sappho/models"
+	"github.com/michealmikeyb/mastodon/sappho/utils"
 	"database/sql"
+	"math"
+)
+
+const (
+	// embedding similarities will tend to cluster above this number
+	embedding_similarity_adjustment = 6500
 )
 
 // Map for the different data stream types
@@ -299,6 +306,69 @@ func FetchCandidateStatusReplyCount(dsm DataStreamMaps, candidate models.Candida
 	return
 }
 
+// Fetch the average embedding for the statuses the account likes and compare that 
+// to the embedding of the candidate status
+func FetchAverageLikeEmbeddingSimilarity(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_liked_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account liked statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	average_like_embedding := utils.GetEmbeddingAverage(*statuses)
+	average_difference := utils.GetAverageEmbeddingDifference(average_like_embedding, candidate_status.Embedding)
+	// take an inverse of the difference to measure closeness, multiply by 100 for more detail
+	expanded_similarity := int(math.Round((1 / average_difference) * 100))
+	// one of the embeddings is mising
+	if expanded_similarity == 100 {
+		c <- 0
+		close(c)
+		return
+	}
+	// adjust since the similarities will cluster
+	adjusted_similarity := expanded_similarity - embedding_similarity_adjustment
+	c <- adjusted_similarity
+	close(c)
+	return
+}
+
+// Fetch the average embedding for the statuses the account likes and compare that 
+// to the embedding of the candidate status
+func FetchAverageReblogEmbeddingSimilarity(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_rebloged_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account rebloged statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	average_reblog_embedding := utils.GetEmbeddingAverage(*statuses)
+	average_difference := utils.GetAverageEmbeddingDifference(average_reblog_embedding, candidate_status.Embedding)
+	// take an inverse of the difference to measure closeness, multiply by 100 for more detail
+	expanded_similarity := int(math.Round((1 / average_difference) * 100))
+	// one of the embeddings is mising
+	if expanded_similarity == 100 {
+		c <- 0
+		close(c)
+		return
+	}
+	// adjust since the similarities will cluster
+	c <- expanded_similarity - embedding_similarity_adjustment
+	close(c)
+	return
+}
+
 // Maps the aggregate name to the function that is used to get it
 var AggregateFunctionMap = map[string]Fetcher{
 	"author_follower_count": FetchAuthorFollowersCount,
@@ -314,6 +384,8 @@ var AggregateFunctionMap = map[string]Fetcher{
 	"candidate_status_like_count": FetchCandidateStatusLikesCount,
 	"candidate_status_reblog_count": FetchCandidateStatusReblogCount,
 	"candidate_status_reply_count": FetchCandidateStatusReplyCount,
+	"average_like_embedding_similarity": FetchAverageLikeEmbeddingSimilarity,
+	"average_reblog_embedding_similarity": FetchAverageReblogEmbeddingSimilarity,
 }
 
 // get the aggregates by initializing a data stream map and iterating through the 

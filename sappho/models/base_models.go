@@ -73,6 +73,7 @@ type Status struct {
 	Content            string    `json:"content"`
 	Reblog             any       `json:"reblog"`
 	Account            Account `json:"account"`
+	Embedding		   []float64
 	MediaAttachments []any `json:"media_attachments"`
 	Mentions         []any `json:"mentions"`
 	Tags             []Tag `json:"tags"`
