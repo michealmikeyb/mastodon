@@ -221,6 +221,8 @@ func GetEmbeddingAverage(statuses []models.Status) []float64 {
 	return averages
 }
 
+// get the average difference between two embeddings by averaging
+// the difference between each attribute of the embedding
 func GetAverageEmbeddingDifference(embedding1 []float64, embedding2 []float64) float64 {
 	if len(embedding1) != len(embedding2) {
 		log.Println("Missing embedding ")
@@ -233,4 +235,17 @@ func GetAverageEmbeddingDifference(embedding1 []float64, embedding2 []float64) f
 	}
 	average := sum / float64(len(embedding1))
 	return average
+}
+
+// get the average similarity for two embeddings by inversing the
+// difference and multiplying by 100 for more detail
+func GetAverageEmbeddingSimilarity(embedding1 []float64, embedding2 []float64) int {
+	average_difference := GetAverageEmbeddingDifference(embedding1, embedding2)
+	// take an inverse of the difference to measure closeness, multiply by 100 for more detail
+	expanded_similarity := int(math.Round((1 / average_difference) * 100))
+	// one of the embeddings is mising
+	if expanded_similarity == 100 {
+		return 0.0
+	}
+	return expanded_similarity
 }

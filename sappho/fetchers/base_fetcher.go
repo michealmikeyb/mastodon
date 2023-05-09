@@ -18,12 +18,13 @@ import (
 	"github.com/michealmikeyb/mastodon/sappho/models"
 	"github.com/michealmikeyb/mastodon/sappho/utils"
 	"database/sql"
-	"math"
 )
 
 const (
 	// embedding similarities will tend to cluster above this number
 	embedding_similarity_adjustment = 6500
+	// the threshold to check whether two embeddings are similar
+	embedding_similarity_threshold = 7300
 )
 
 // Map for the different data stream types
@@ -322,11 +323,8 @@ func FetchAverageLikeEmbeddingSimilarity(dsm DataStreamMaps, candidate models.Ca
 		return
 	}
 	average_like_embedding := utils.GetEmbeddingAverage(*statuses)
-	average_difference := utils.GetAverageEmbeddingDifference(average_like_embedding, candidate_status.Embedding)
-	// take an inverse of the difference to measure closeness, multiply by 100 for more detail
-	expanded_similarity := int(math.Round((1 / average_difference) * 100))
-	// one of the embeddings is mising
-	if expanded_similarity == 100 {
+	expanded_similarity := utils.GetAverageEmbeddingSimilarity(average_like_embedding, candidate_status.Embedding)
+	if expanded_similarity < 1 {
 		c <- 0
 		close(c)
 		return
@@ -354,21 +352,72 @@ func FetchAverageReblogEmbeddingSimilarity(dsm DataStreamMaps, candidate models.
 		return
 	}
 	average_reblog_embedding := utils.GetEmbeddingAverage(*statuses)
-	average_difference := utils.GetAverageEmbeddingDifference(average_reblog_embedding, candidate_status.Embedding)
-	// take an inverse of the difference to measure closeness, multiply by 100 for more detail
-	expanded_similarity := int(math.Round((1 / average_difference) * 100))
-	// one of the embeddings is mising
-	if expanded_similarity == 100 {
+	expanded_similarity := utils.GetAverageEmbeddingSimilarity(average_reblog_embedding, candidate_status.Embedding)
+	if expanded_similarity < 1 {
 		c <- 0
 		close(c)
 		return
 	}
-	// adjust since the similarities will cluster
 	c <- expanded_similarity - embedding_similarity_adjustment
 	close(c)
 	return
 }
 
+// Fetch the number of liked statuses that have a close embedding to
+// the candidate status
+func FetchLikedStatusesWithCloseEmbeddingCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_liked_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account liked statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	liked_status_count := 0
+	for _, status := range *statuses {
+		similarity := utils.GetAverageEmbeddingSimilarity(status.Embedding, candidate_status.Embedding)
+		if similarity >= embedding_similarity_threshold {
+			liked_status_count = liked_status_count + 1
+		}
+	}
+	c <- liked_status_count
+	close(c)
+	return
+	
+}
+
+// Fetch the number of rebloged statuses that have a close embedding to
+// the candidate status
+func FetchReblogedStatusesWithCloseEmbeddingCount(dsm DataStreamMaps, candidate models.Candidate, c chan int) {
+	statuses, err := dsm.Statuses["account_rebloged_statuses_stream"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting account rebloged statuses", err)
+		close(c)
+		return
+	}
+	candidate_status, err := dsm.Status["candidate_status"].GetData(candidate)
+	if err != nil {
+		log.Println("Error getting candidate status", err)
+		close(c)
+		return
+	}
+	rebloged_status_count := 0
+	for _, status := range *statuses {
+		similarity := utils.GetAverageEmbeddingSimilarity(status.Embedding, candidate_status.Embedding)
+		if similarity >= embedding_similarity_threshold {
+			rebloged_status_count = rebloged_status_count + 1
+		}
+	}
+	c <- rebloged_status_count
+	close(c)
+	return
+	
+}
 // Maps the aggregate name to the function that is used to get it
 var AggregateFunctionMap = map[string]Fetcher{
 	"author_follower_count": FetchAuthorFollowersCount,
@@ -386,6 +435,8 @@ var AggregateFunctionMap = map[string]Fetcher{
 	"candidate_status_reply_count": FetchCandidateStatusReplyCount,
 	"average_like_embedding_similarity": FetchAverageLikeEmbeddingSimilarity,
 	"average_reblog_embedding_similarity": FetchAverageReblogEmbeddingSimilarity,
+	"account_liked_status_with_similar_embedding": FetchLikedStatusesWithCloseEmbeddingCount,
+	"account_rebloged_status_with_similar_embedding": FetchReblogedStatusesWithCloseEmbeddingCount,
 }
 
 // get the aggregates by initializing a data stream map and iterating through the 

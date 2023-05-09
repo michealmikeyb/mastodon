@@ -27,11 +27,11 @@ var	aggregate_weights = map[string]float32 {
 	// Number of statuses that have a tag that the candidate has that the account liked
 	"account_liked_tag_status_count": 10.0,
 	// Number of statuses by the author that the account rebloged
-	"account_rebloged_author_status_count": 50.0,
+	"account_rebloged_author_status_count": 30.0,
 	// Total number of statuses the account rebloged
 	"account_rebloged_status_count": 0,
 	// Number of statuses that have a tag that the candidate has that the account rebloged
-	"account_rebloged_tag_status_count": 40.0,
+	"account_rebloged_tag_status_count": 20.0,
 	// Number of followers the author has
 	"author_follower_count": 0.004,
 	// Number of likes on authors last 20 statuses
@@ -54,6 +54,10 @@ var	aggregate_weights = map[string]float32 {
 	// and the average embedding for all the statuses rebloged by the account
 	// will be in the 0 - 1000 range
 	"average_reblog_embedding_similarity": 3,
+	// Number of statuses liked by the account with a similar embedding
+	"account_liked_status_with_similar_embedding": 8,
+	// Number of statuses rebloged by the account with a similar embedding
+	"account_rebloged_status_with_similar_embedding": 15,
 
 }
 
