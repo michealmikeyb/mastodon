@@ -7,6 +7,7 @@ class Api::V1::Timelines::ForYouController < Api::BaseController
 
   def show
     @statuses = load_statuses
+    Aggregate.where(account: current_account).where(status: @statuses).update(seen: true)
 
     render json: @statuses,
            each_serializer: REST::StatusSerializer,
