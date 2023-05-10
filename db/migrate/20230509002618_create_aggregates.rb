@@ -6,7 +6,7 @@ class CreateAggregates < ActiveRecord::Migration[6.1]
       t.references :account, null: false, foreign_key: true
       t.references :status, null: false, foreign_key: true
       t.json :aggregate
-      t.bool :seen
+      t.boolean :seen
 
       t.timestamps
     end

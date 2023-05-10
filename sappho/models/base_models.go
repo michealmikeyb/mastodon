@@ -2,6 +2,9 @@ package models
 
 import (
 	"time"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 )
 
 type Candidate struct {
@@ -14,8 +17,11 @@ type Candidate struct {
 	AuthorDomain 		string `json:"author_domain"`
 }
 
+type Aggregates map[string]int 
+
+
 type AggregatedCandidate struct {
-	Aggregates				map[string]int `json:"aggregates"`
+	Aggregates				Aggregates `json:"aggregates"`
 	Candidate				Candidate `json:"candidate"`
 }
 
@@ -85,4 +91,17 @@ type Status struct {
 type Tag struct {
 	Name	string `json:"name"`
 	Url		string `json:"url"`
+}
+
+// pq methods
+func (a Aggregates) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+func (a *Aggregates) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &a)
 }

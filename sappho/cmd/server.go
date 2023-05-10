@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/michealmikeyb/mastodon/sappho/fetchers"
 	"github.com/michealmikeyb/mastodon/sappho/models"
+	"github.com/michealmikeyb/mastodon/sappho/utils"
 )
 
 const (
@@ -129,6 +130,10 @@ func getAggregatesHandler(c *gin.Context) {
 		log.Panic(err)
 	}
 	res, err := fetchers.GetAggregates(candidates, db_conn)
+	if err != nil {
+		log.Panic(err)
+	}
+	err = utils.UpsertAggregates(db_conn, res)
 	if err != nil {
 		log.Panic(err)
 	}
