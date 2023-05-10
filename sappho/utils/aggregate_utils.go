@@ -74,6 +74,7 @@ func UpsertAggregates(db_conn *sql.DB, aggregates []models.AggregatedCandidate) 
 
 	// if all are in the db no need for insert
 	if len(candidates_not_in_db) == 0 {
+		log.Println("No statuses to insert, returning")
 		return nil
 	}
 	sql_str := "INSERT INTO aggregates(status_id, account_id, aggregate, created_at, updated_at) VALUES "
@@ -83,7 +84,16 @@ func UpsertAggregates(db_conn *sql.DB, aggregates []models.AggregatedCandidate) 
 	parameter_number := 1
 	// insert each of the aggregates into the values
 	for _, ac := range candidates_not_in_db {
-		log.Println("adding candidate")
+		account_id, err := strconv.Atoi(ac.Candidate.AccountId)
+		if err != nil {
+			log.Println("Error converting account id to insert aggregate ", err)
+			continue
+		}
+		status_id, err := strconv.Atoi(ac.Candidate.StatusId)
+		if err != nil {
+			log.Println("Error converting status id to insert aggregate ", err)
+			continue
+		}
 		sql_str += fmt.Sprintf(
 			"($%d, $%d, $%d, $%d, $%d),", 
 			parameter_number, 
@@ -93,15 +103,6 @@ func UpsertAggregates(db_conn *sql.DB, aggregates []models.AggregatedCandidate) 
 			parameter_number +4,)
 		parameter_number += 5
 
-		account_id, err := strconv.Atoi(ac.Candidate.AccountId)
-		if err != nil {
-			return err
-		}
-		status_id, err := strconv.Atoi(ac.Candidate.StatusId)
-		log.Println("test")
-		if err != nil {
-			return err
-		}
 		vals = append(
 			vals, 
 			status_id, 

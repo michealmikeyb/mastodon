@@ -225,7 +225,6 @@ func GetEmbeddingAverage(statuses []models.Status) []float64 {
 // the difference between each attribute of the embedding
 func GetAverageEmbeddingDifference(embedding1 []float64, embedding2 []float64) float64 {
 	if len(embedding1) != len(embedding2) {
-		log.Println("Missing embedding ")
 		return 1.0
 	}
 	var sum float64

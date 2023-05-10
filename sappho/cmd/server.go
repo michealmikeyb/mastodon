@@ -157,6 +157,10 @@ func getRankingsHandler(c *gin.Context) {
 	if err != nil {
 		log.Panic(err)
 	}
+	err = utils.UpsertAggregates(db_conn, aggregated_candidates)
+	if err != nil {
+		log.Panic(err)
+	}
 	ranked_candidates := make([]models.RankedCandidate, len(aggregated_candidates))
 	for i, agg_cand := range aggregated_candidates {
 		var rank float32
