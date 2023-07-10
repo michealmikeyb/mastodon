@@ -42,11 +42,11 @@ var	aggregate_weights = map[string]float32 {
 	// Number of replies on authors last 20 statuses
 	"author_reply_count": 0.6,
 	// Number of likes for candidate status
-	"candidate_status_like_count": 1.0,
+	"candidate_status_like_count": 0.25,
 	// Number of reblogs for candidate status
-	"candidate_status_reblog_count": 2.0,
+	"candidate_status_reblog_count": 0.75,
 	// Number of replies for candidate status
-	"candidate_status_reply_count": 1.5,
+	"candidate_status_reply_count": 0.5,
 	// average similarity between the candidate status open ai embedding 
 	// and the average embedding for all the statuses liked by the account
 	// will be in the 0 - 1000 range

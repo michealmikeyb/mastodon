@@ -31,7 +31,43 @@ class Api::V1::Trends::StatusesController < Api::BaseController
       status = FetchRemoteStatusService.new.call(status_json['url'])
       statuses.append(status) unless status.nil?
     end
-    statuses
+    # uri_string = 'https://lemmy.world/api/v3/post/list?sort=Active&limit=25'
+    # uri = URI(uri_string)
+    # res = Net::HTTP.get_response(uri)
+    # res_json = JSON.parse(res.body)
+    # res_json['posts'].each do |status_json|
+    #   status = FetchRemoteStatusService.new.call(status_json['post']['ap_id'])
+    #   if !status_json['post']['body'].nil? && !status.nil?
+    #     status.text = status_json['post']['name'] + "<p>body: #{status_json['post']['body']}</p>"
+    #     status.save!
+    #   end
+    #   if !status_json['post']['url'].nil? && !status.nil? && status_json['post']['url'].end_with?('png', 'jpg', 'jpg')
+    #     attachment_exists = false
+    #     status.media_attachments.each do |attachment|
+    #       attachment_exists = true if attachment.remote_url == status_json['post']['url']
+    #     end
+    #     unless attachment_exists
+    #       media_attachment = MediaAttachment.create(
+    #         account: status.account,
+    #         status: status,
+    #         remote_url: status_json['post']['url']
+    #       )
+    #       media_attachment.download_file!
+    #       media_attachment.download_thumbnail!
+    #       media_attachment.save
+    #       status.media_attachments << media_attachment
+    #     end
+    #   elsif !status_json['post']['url'].nil? && !status.nil?
+    #     status.text = status_json['post']['name'] + "<p><a href=\"#{status_json['post']['url']}\" rel=\"nofollow noopener noreferrer\" target=\"_blank\">#{status_json['post']['url']}</a></p>"
+    #     status.save!
+    #   end
+    #   if !status_json['post']['body'].nil? && !status.nil?
+    #     status.text = status_json['post']['name'] + "<p><a href=\"#{status_json['post']['url']}\" rel=\"nofollow noopener noreferrer\" target=\"_blank\">#{status_json['post']['url']}</a></p>"
+    #     status.save!
+    #   end
+    #   statuses.append(status) unless status.nil?
+    # end
+    # statuses
   end
 
   def set_statuses
